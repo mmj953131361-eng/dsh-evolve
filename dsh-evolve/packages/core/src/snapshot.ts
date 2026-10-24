@@ -13,6 +13,8 @@ export interface AgentSnapshot {
   readonly recommendations?: ReturnType<typeof import('./lifecycle.js').lifecycleSummary>['recommendations']
   readonly id: string
   readonly workspace: string
+  /** Current convergence of the session/workspace work. */
+  readonly workstreamTitle?: string
   readonly enabled: boolean
   readonly revision: RevisionId | null
   readonly level: Level | null
@@ -26,6 +28,11 @@ export interface AgentSnapshot {
     readonly inputTokens: number
     readonly outputTokens: number
     readonly extraTokens: number
+    /** Actual settled processing tokens, excluding unknown reservations. */
+    readonly settledTokens?: number
+    /** Conservatively reserved tokens whose external outcome is still unknown. */
+    readonly unknownTokens?: number
+    readonly stageTokens?: readonly { readonly stage: string; readonly charged: number; readonly unknown: number }[]
   }
   readonly history: readonly {
     readonly id: RevisionId

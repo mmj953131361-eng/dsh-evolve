@@ -1,4 +1,4 @@
-# 安装与运行（0.2.2-dev.4.public.1）
+# 安装与运行（0.2.2-dev.5）
 
 普通用户优先按[Quickstart](../../docs/quickstart.md)下载预构建包安装；以下是源码构建及进阶配置。
 
@@ -8,7 +8,7 @@
 pnpm install
 pnpm build
 pnpm --filter @dsh-evolve/bundle pack --pack-destination "$PWD/dist"
-dsh plugin --profile <name> add ./dist/dsh-evolve-bundle-0.2.2-dev.4.public.1.tgz
+dsh plugin --profile <name> add ./dist/dsh-evolve-bundle-0.2.2-dev.5.tgz
 dsh --profile <name> --dump-config
 ```
 
@@ -25,7 +25,7 @@ allowBuilds:
 
 应看到 core/observer/probe/sandbox/agent/tools/commands/ui 组合。不要再单独安装 core。安装验证使用临时 DSH_HOME，不改用户现有 profile。
 
-本公开包沿用 0.2.2-dev.4 的运行源码，增加公开内容边界与打包检查。版本中的 `public.1` 表示发布整理，不表示模型质量提升。安装后重启对应 Profile，并使用新会话。
+本版本支持同一会话中的阶段学习、工作标题及阶段策略延续，并增加新输入验证。安装后重启对应 Profile，并使用新会话。
 
 ## 前台与 worker
 
@@ -99,3 +99,11 @@ Web 面板默认只显示当前会话的状态卡：正在做什么、当前策�
 旧 Revision/Library 元数据迁移前写备份，旧内容 ID 仍能读取。新任务不自动继承旧工作区 current。未知更高 schema 拒绝读写，不静默重置。输入快照包含本地任务材料，请像源文件一样保管。
 
 卸载：`dsh plugin --profile <name> remove @dsh-evolve/bundle`。独立 worker 另行停止，工作区证据保留。
+
+## 同一会话中的阶段学习
+
+在有来源的要求与阶段交付证据后，Evo 可以为当前阶段排队学习，不必等待整个会话结束。面板的“学习这个阶段”与 `/evolve checkpoint` 提供手动入口。阶段关闭后继续工作会保留完整任务要求；实质性需求变化会更新目标版本，使旧目标下的候选不能直接采用。
+
+自动阶段检查默认开启，`checkpoint: manual` 可改为手动。`checkpointIdleMs`、`checkpointCooldownMs` 和 `checkpointMinTurns` 控制等待、冷却和最少轮数。闲置本身不构成完成证据。阶段学习结果不能单独作为扩大到项目或 Profile 的证据。
+
+适用的数据文件任务还会在冻结候选后生成新输入、独立推导预期并重复执行。缺少可替换数据或可靠预期时会记录跳过原因。这是额外的选择证据，不代表模型质量已经得到证明；所有调用仍受同一预算约束。

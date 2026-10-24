@@ -4,12 +4,19 @@ import type { HarnessTree } from './tree.js'
 import { contentHash } from './tree.js'
 import type { LifecycleState } from './lifecycle-types.js'
 import type { ScopedHarnessPlan, ScopedHarnessReceipt } from './scoped-harness.js'
+import { compactText } from './view.js'
+
+export type AdoptionChangeKind = 'instruction' | 'skill' | 'memory' | 'project-instruction' | 'profile-config'
 
 export interface AdoptionPlan {
   readonly id: string
   status: 'pending' | 'applied' | 'rejected' | 'stale' | 'failed' | 'undone'
   readonly scope: 'session' | 'project' | 'profile'
   readonly adoptionMode?: 'auto' | 'review'
+  /** Short list-card label; full rationale stays in expectedEffect/reason. */
+  readonly headline?: string
+  readonly changeKinds?: readonly AdoptionChangeKind[]
+  readonly fileCount?: number
   readonly expectedEffect?: string
   readonly targetLabel?: string
   readonly targetId?: string
@@ -61,6 +68,26 @@ export function adoptionId(plan: Pick<AdoptionPlan, 'scope' | 'targetSessionId' 
     reason: plan.reason, verification: plan.verification, activation: plan.activation, activationDetail: plan.activationDetail, rollback: plan.rollback,
     targetId: plan.targetId, scopedPlan: plan.scopedPlan?.id, expectedEffect: plan.expectedEffect, impactNote: plan.impactNote, support: plan.support,
   }) })
+}
+
+/** Map changed paths to the user-facing component categories shown on a change card. */
+export function adoptionChangeKinds(paths: readonly string[]): AdoptionChangeKind[] {
+  const kinds = new Set<AdoptionChangeKind>()
+  for (const path of paths) {
+    const normalized = path.split('\\').join('/')
+    if (/(^|\/)AGENTS(?:\.local)?\.md$/.test(normalized)) kinds.add('project-instruction')
+    else if (/(^|\/)cordis\.patch\.yml$/.test(normalized) || /(^|\/)profile\.overlay\.yml$/.test(normalized)) kinds.add('profile-config')
+    else if (/(^|\/)skills\//.test(normalized) || normalized.endsWith('/SKILL.md')) kinds.add('skill')
+    else if (/(^|\/)memory\//.test(normalized)) kinds.add('memory')
+    else kinds.add('instruction')
+  }
+  const order: AdoptionChangeKind[] = ['instruction', 'memory', 'skill', 'project-instruction', 'profile-config']
+  return order.filter(kind => kinds.has(kind))
+}
+
+/** A bounded card label derived from model-authored effect text. */
+export function adoptionHeadline(text: string | undefined, fallback: string, max = 80): string {
+  return compactText((text ?? '').split(/\n+/)[0] ?? '', max) || fallback
 }
 
 export function adoptionSummary(plan: AdoptionPlan): AdoptionSummary {

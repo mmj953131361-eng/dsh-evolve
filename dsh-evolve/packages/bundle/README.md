@@ -1,9 +1,9 @@
-# @dsh-evolve/bundle 0.2.2-dev.4.public.1
+# @dsh-evolve/bundle 0.2.2-dev.5
 
 DSH 0.2.1-rc.2 的单包安装入口，包含 core、observer、agent、probe、sandbox、tools、commands、ui 与可选 loop。无需单独安装兄弟包。
 
 ```sh
-dsh plugin --profile <name> add ./dsh-evolve-bundle-0.2.2-dev.4.public.1.tgz
+dsh plugin --profile <name> add ./dsh-evolve-bundle-0.2.2-dev.5.tgz
 ```
 
 普通聊天默认自动观察有来源的需求与交付证据，宿主后台 worker 执行 baseline → INV/DOM → compose 重跑 → 匿名选择 → 反思；idle 本身不代表任务完成。允许 KEEP_BASE 和不写经验。会话优化默认自动可撤销，项目明确确认，Profile 额外确认影响范围。状态、完整 diff 和失败重试在 Evo 入口，不要求用户输入命令。

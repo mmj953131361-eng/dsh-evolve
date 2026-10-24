@@ -38,7 +38,7 @@ window.__ModuleLoader__.load({
         learningRuns: 'Learning runs',
         candidateCount: 'Candidates generated',
         resourceUse: 'Resource use',
-        processingTokens: 'Processing tokens',
+        processingTokens: 'Processing tokens', settledTokens: 'Settled tokens', unknownTokens: 'Unconfirmed reservation', tokenBreakdown: 'Tokens by stage',
         viewComparison: 'View comparison',
         viewChanges: 'View changes',
         reviewConfirm: 'Review and confirm',
@@ -125,11 +125,21 @@ window.__ModuleLoader__.load({
         watchingBody: 'Evo will look for improvements as you work. Nothing needs your attention.',
         suggestionTitle: 'A reusable improvement is ready', suggestionBody: 'Review where it applies before making a wider change.',
         suggestedFor: 'Suggested for', expected: 'Expected benefit', expectedUnknown: 'Potential benefit still needs validation in this scope.',
-        project: 'This project', profile: 'This profile', directory: 'Directory', files: 'Files that change', otherSessions: 'Other sessions', projects: 'Projects',
+        project: 'This project', profile: 'This profile', directory: 'Directory', files: 'Files that change', fileUnit: 'file(s)', otherSessions: 'Other sessions', projects: 'Projects',
+        changeInstruction: 'Instructions', changeSkill: 'Skill', changeMemory: 'Memory', changeProjectInstruction: 'Project instructions', changeProfileConfig: 'Profile config',
+        impactSession: 'Only the current session; undo restores the previous prompt and catalog.',
+        impactProject: 'New sessions in this project load the managed instructions and skills; already loaded sessions are not guaranteed to refresh.',
+        impactProfile: 'Agent scopes that inherit this profile are affected, including projects not open here. Saved files do not prove activation.',
+        activationNextRequestDetail: 'Prompt and skill catalog update on the next request; skill bodies load on demand. Existing conversation history is not rewritten.',
+        activationNewSessionDetail: 'New sessions in this project load the change; the current session is not guaranteed to refresh.',
+        activationRestartDetail: 'Requires a profile reload or restart. File persistence does not confirm every Agent has loaded it.',
+        activationManualDetail: 'Requires a separate activation step; saved files are not enough.',
+        rollbackDetail: 'Undo restores only these managed files. User edits made after the change are preserved; history is not rewritten.',
         scopeUnknown: 'The full impact is not available. Review the target before applying.', noOtherSessions: 'No other currently known sessions.', noOtherProjects: 'No other currently known projects.',
         profileNote: 'This changes a shared profile. Keep the current setup unless you want the change to apply across its projects.',
         confirmScope: 'I understand and confirm the affected scope', viewDiff: 'View diff', verification: 'Why this suggestion was made',
         autoNotice: 'A session improvement is now in use', undoChange: 'Undo', undone: 'Undone', undoDone: 'The previous approach has been restored.', undoBody: 'You undid the improvement. Evo will keep learning from your work.',
+        learnNow: 'Learn this phase',
         dismissNotice: 'Dismiss notification', close: 'Close', advanced: 'Run details', status: 'Status',
         failureTitle: 'A background check could not finish', failureBody: 'Your foreground work can continue. Review the details or retry when ready.',
         retry: 'Retry', offlineTitle: 'Evo cannot refresh its status', offlineBody: 'The connection may have changed. No action is needed to continue your work.',
@@ -162,7 +172,7 @@ window.__ModuleLoader__.load({
         learningRuns: '学习次数',
         candidateCount: '生成候选',
         resourceUse: '学习消耗',
-        processingTokens: '处理 token',
+        processingTokens: '处理 token', settledTokens: '已结算 token', unknownTokens: '未确认预留', tokenBreakdown: '各阶段 token',
         viewComparison: '查看比较',
         viewChanges: '查看变化',
         reviewConfirm: '查看并确认',
@@ -249,11 +259,21 @@ window.__ModuleLoader__.load({
         watchingBody: 'Evo 会在你工作时寻找改进，目前无需你处理。',
         suggestionTitle: '发现一个可复用改进', suggestionBody: '扩大应用范围前，请先看一下它会影响哪里。',
         suggestedFor: '建议应用到', expected: '预计效果', expectedUnknown: '在这个范围内的收益仍需验证。',
-        project: '当前项目', profile: '当前 Profile', directory: '项目目录', files: '修改的文件', otherSessions: '其他会话', projects: '涉及的项目',
+        project: '当前项目', profile: '当前 Profile', directory: '项目目录', files: '修改的文件', fileUnit: '个文件', otherSessions: '其他会话', projects: '涉及的项目',
+        changeInstruction: '行为指引', changeSkill: '技能', changeMemory: '记忆', changeProjectInstruction: '项目指令', changeProfileConfig: 'Profile 配置',
+        impactSession: '只影响当前会话；撤销后恢复之前的提示和目录。',
+        impactProject: '本项目的新会话会加载受管指令和技能；已经加载的会话不保证刷新。',
+        impactProfile: '影响继承该 Profile 的 Agent，包括当前没有打开的项目。文件写入成功不代表已经加载。',
+        activationNextRequestDetail: '下一请求更新提示和技能目录；技能正文按需加载。已有对话历史不会被重写。',
+        activationNewSessionDetail: '本项目的新会话会加载这次改动；当前会话不保证刷新。',
+        activationRestartDetail: '需要重载 Profile 或重启。仅写入文件不能确认所有 Agent 已加载。',
+        activationManualDetail: '需要单独的启用步骤，仅保存文件不够。',
+        rollbackDetail: '撤销只恢复这些受管文件；改动后的用户编辑会保留，已有历史不会被重写。',
         scopeUnknown: '影响范围尚不完整，请先核对应用目标。', noOtherSessions: '没有其他已知的活动会话。', noOtherProjects: '没有其他已知的项目。',
         profileNote: '这会修改共享的 Profile。默认保持现状，确认后才会影响使用它的项目。',
         confirmScope: '我已了解并确认以上影响范围', viewDiff: '查看 diff', verification: '为什么建议这样改',
         autoNotice: '已应用一个会话内改进', undoChange: '撤销', undone: '已撤销', undoDone: '已恢复之前的方式。', undoBody: '你撤销了这次改进，Evo 会继续从后续工作中学习。',
+        learnNow: '学习这个阶段',
         dismissNotice: '收起提示', close: '关闭', advanced: '查看运行详情', status: '状态',
         failureTitle: '一次后台验证未能完成', failureBody: '你可以继续当前工作，也可以查看原因或稍后重试。',
         retry: '重试', offlineTitle: '暂时无法刷新 Evo 状态', offlineBody: '连接可能发生了变化，不影响你继续工作。',
@@ -273,8 +293,8 @@ window.__ModuleLoader__.load({
 
     const STYLE = `
       #dsh-evolve-button,#dsh-evolve-panel,#dsh-evolve-review,#dsh-evolve-toast{--ev-bg:#fff;--ev-subtle:#f6f7f8;--ev-text:#20252c;--ev-muted:#737c88;--ev-line:#e4e7eb;--ev-accent:#365dd8;--ev-soft:#eef2ff;--ev-warning:#9a671d;box-sizing:border-box;color:var(--ev-text);font:13px/1.55 ui-sans-serif,system-ui,-apple-system,sans-serif}
-      #dsh-evolve-button{position:fixed;right:20px;bottom:18px;z-index:2147483000;display:flex;align-items:center;gap:8px;border:1px solid var(--ev-line);background:var(--ev-bg);border-radius:999px;padding:8px 13px;cursor:pointer;box-shadow:0 3px 14px #17202b0c;font-size:12px}
-      #dsh-evolve-panel{position:fixed;right:20px;bottom:64px;width:min(380px,calc(100vw - 32px));max-height:min(740px,calc(100vh - 96px));z-index:2147483000;display:flex;flex-direction:column;background:var(--ev-bg);border:1px solid var(--ev-line);border-radius:18px;box-shadow:0 18px 60px #11182720;overflow:hidden}
+      #dsh-evolve-button{position:fixed;right:20px;top:72px;z-index:2147483000;display:flex;align-items:center;gap:8px;border:1px solid var(--ev-line);background:var(--ev-bg);border-radius:999px;padding:8px 13px;cursor:pointer;box-shadow:0 3px 14px #17202b0c;font-size:12px}
+      #dsh-evolve-panel{position:fixed;right:20px;top:118px;width:min(380px,calc(100vw - 32px));max-height:calc(100vh - 140px);z-index:2147483000;display:flex;flex-direction:column;background:var(--ev-bg);border:1px solid var(--ev-line);border-radius:18px;box-shadow:0 18px 60px #11182720;overflow:hidden}
       #dsh-evolve-panel header{display:flex;align-items:center;gap:8px;padding:15px 18px;border-bottom:1px solid var(--ev-line)}
       #dsh-evolve-panel header strong{font-size:14px;flex:1;font-weight:600}
       .dsh-ev-btn{background:var(--ev-bg);color:var(--ev-text);border:1px solid var(--ev-line);border-radius:8px;padding:7px 11px;font:inherit;font-size:12px;cursor:pointer;line-height:1.35}
@@ -501,7 +521,20 @@ window.__ModuleLoader__.load({
         }
       }
 
-      function scopeName(plan) { return plan.targetLabel || (plan.scope === 'project' ? L.project : plan.scope === 'profile' ? L.profile : L.session) }
+      function scopeName(plan) {
+        if (plan.scope === 'profile') return plan.profileName ? `${L.profile} · ${plan.profileName}` : L.profile
+        return plan.scope === 'project' ? L.project : L.session
+      }
+      function impactText(plan) { return plan.scope === 'project' ? L.impactProject : plan.scope === 'profile' ? L.impactProfile : L.impactSession }
+      function activationDetailText(plan) {
+        return plan.activation === 'new-session' ? L.activationNewSessionDetail
+          : plan.activation === 'restart' ? L.activationRestartDetail
+            : plan.activation === 'manual' ? L.activationManualDetail : L.activationNextRequestDetail
+      }
+      function changeKindName(kind) {
+        return ({ instruction: L.changeInstruction, skill: L.changeSkill, memory: L.changeMemory,
+          'project-instruction': L.changeProjectInstruction, 'profile-config': L.changeProfileConfig })[kind] || ''
+      }
 
       function localized(value) { return typeof value === 'string' ? value : value?.[language] || value?.en || '' }
       function viewOf(agent) { return agent?.view || null }
@@ -615,20 +648,21 @@ window.__ModuleLoader__.load({
         fact(L.suggestedFor, scopeName(plan))
         if (plan.targetDirectory) fact(L.directory, plan.targetDirectory)
         if (plan.profileName) fact('Profile', plan.profileName)
-        fact(L.expected, plan.expectedEffect || L.expectedUnknown)
+        fact(L.expected, plan.headline || plan.expectedEffect || L.expectedUnknown)
         fact(L.activation, plan.activation === 'next-request' ? L.nextRequest : plan.activation === 'new-session' ? L.newSession : plan.activation === 'restart' ? L.restart : L.manualActivation)
-        if (plan.activationDetail) fact('', plan.activationDetail)
+        fact('', activationDetailText(plan))
         if (plan.scope !== 'session') {
           fact(L.files, (review.files || []).map(file => file.path).join('\n') || L.noDiff)
           fact(L.otherSessions, plan.affectedSessions ? plan.affectedSessions.join(', ') || L.noOtherSessions : L.scopeUnknown)
           if (profile) fact(L.projects, plan.affectedProjects ? plan.affectedProjects.join(', ') || L.noOtherProjects : L.scopeUnknown)
         }
-        if (plan.impactNote) fact(L.scope, plan.impactNote)
+        fact(L.scope, impactText(plan))
         dialog.appendChild(facts)
         dialog.appendChild(el('details', {}, [el('summary', { text: L.verification }),
+          ...(plan.expectedEffect && plan.expectedEffect !== plan.headline ? [el('p', { class: 'dsh-ev-muted', text: plan.expectedEffect })] : []),
           el('p', { class: 'dsh-ev-muted', text: plan.reason }),
           ...(plan.verification || []).map(item => el('p', { class: 'dsh-ev-muted', text: item })),
-          el('p', { class: 'dsh-ev-muted', text: `${L.undo}: ${plan.rollback}` }),
+          el('p', { class: 'dsh-ev-muted', text: `${L.undo}: ${L.rollbackDetail}` }),
         ]))
         const changes = el('details', { 'data-review-diff': '' }, [el('summary', { text: `${L.viewDiff} · ${(review.files || []).length} ${L.files}` })])
         for (const file of review.files || []) changes.appendChild(el('details', {}, [
@@ -668,11 +702,12 @@ window.__ModuleLoader__.load({
         busy = true
         error = ''
         try {
-          await request('/evolve/action', {
+          const result = await request('/evolve/action', {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': 'application/json', ...(action === 'checkpoint' ? { 'x-dsh-evolve-action': '1' } : {}) },
             body: JSON.stringify({ action, agentId: selected, ...(extra || {}) }),
           })
+          if (action === 'checkpoint' && result?.ok === false) { error = result.reason || L.statusUnavailable; render(); return }
           await refresh()
         } catch (cause) {
           error = cause instanceof Error ? cause.message : String(cause)
@@ -754,7 +789,7 @@ window.__ModuleLoader__.load({
       function renderStatus(agent, view, body, detailed = false) {
         const card = el('div', { class: 'dsh-ev-status-card', 'data-status-card': '' })
         card.appendChild(el('div', { class: 'dsh-ev-eyebrow' }, [el('span', { class: `dsh-ev-dot ${statusTone(view.state)}`, 'aria-hidden': 'true' }), el('span', { text: localized(view.title) })]))
-        card.appendChild(el('h3', { text: view.taskTitle || L.currentTask }))
+        card.appendChild(el('h3', { text: view.workstreamTitle || view.taskTitle || L.currentTask }))
         card.appendChild(el('p', { class: 'dsh-ev-muted', text: localized(view.reason) || localized(view.summary) }))
         card.appendChild(el('div', { class: 'dsh-ev-strategy' }, [el('span', { text: L.currentStrategy }), el('strong', { text: strategyText(view) })]))
         const actions = el('div', { class: 'dsh-ev-status-actions' })
@@ -765,6 +800,7 @@ window.__ModuleLoader__.load({
           if (undo) actions.appendChild(actionButton(L.undoChange, () => { void undoChange(agent.id, undo) }))
           if (view.state === 'pending-adoption' && deferredAdoption !== view.adoptionId) actions.appendChild(actionButton(L.defer, () => { deferredAdoption = view.adoptionId; render() }))
         }
+        if (view.state === 'running') actions.appendChild(actionButton(L.learnNow, () => { void act('checkpoint') }, true))
         if (!detailed) actions.appendChild(el('button', { class: 'dsh-ev-btn quiet detail-link', text: L.details, onclick: () => showDetails() }))
         if (actions.children.length) card.appendChild(actions)
         body.appendChild(card)
@@ -772,14 +808,18 @@ window.__ModuleLoader__.load({
       function renderOverview(agent, view, body) {
         renderStatus(agent, view, body, true)
         const metrics = el('div', { class: 'dsh-ev-metrics' })
-        for (const [label, value] of [[L.learningRuns, view.learningCount ? number(view.learningCount) : L.notLearned], [L.candidateCount, number(view.candidateCount)], [L.processingTokens, number(agent.budget?.extraTokens)]]) {
+        for (const [label, value] of [[L.learningRuns, view.learningCount ? number(view.learningCount) : L.notLearned], [L.candidateCount, number(view.candidateCount)], [L.settledTokens, number(agent.budget?.settledTokens ?? agent.budget?.extraTokens)]]) {
           metrics.appendChild(el('div', {}, [el('span', { text: label }), el('strong', { text: value })]))
         }
         body.appendChild(metrics)
+        if (agent.budget?.unknownTokens) body.appendChild(el('p', { class: 'dsh-ev-muted', text: `${L.unknownTokens} · ${number(agent.budget.unknownTokens)}` }))
         if (view.updatedAt) body.appendChild(el('p', { class: 'dsh-ev-muted', text: `${L.created} · ${dateText(view.updatedAt)}` }))
         if (view.activation) body.appendChild(el('p', { class: 'dsh-ev-muted', text: `${L.activationShort} · ${activationText(view.activation)}` }))
         if (view.detail) body.appendChild(diagnostic(view.detail, L.technicalReason))
-        if (diagnosticsOpen) body.appendChild(diagnostic(agent, L.diagnostics, true))
+        if (diagnosticsOpen) {
+          if (agent.budget?.stageTokens?.length) body.appendChild(diagnostic(agent.budget.stageTokens, L.tokenBreakdown))
+          body.appendChild(diagnostic(agent, L.diagnostics, true))
+        }
       }
       function renderRecords(agent, body) {
         const jobs = agent.experiments || []
@@ -787,7 +827,7 @@ window.__ModuleLoader__.load({
         for (const [index, job] of jobs.entries()) {
           const item = el('article', { class: 'dsh-ev-record' })
           item.appendChild(el('div', { class: 'dsh-ev-record-meta' }, [el('span', { text: statusText(job.status) }), el('time', { text: dateText(job.endedAt || job.createdAt) })]))
-          item.appendChild(el('h4', { text: job.taskTitle || `${viewOf(agent)?.taskTitle || L.currentTask} · ${jobs.length - index}` }))
+          item.appendChild(el('h4', { text: job.title || job.taskTitle || `${viewOf(agent)?.workstreamTitle || viewOf(agent)?.taskTitle || L.currentTask} · ${jobs.length - index}` }))
           if (job.status === 'kept-base') item.appendChild(el('p', { class: 'dsh-ev-muted', text: L.keptBody }))
           if (job.status === 'selected') item.appendChild(el('p', { class: 'dsh-ev-muted', text: L.selected }))
           const comparison = el('details', { 'data-comparison': '' }, [el('summary', { text: `${L.comparison} · ${(job.candidates || []).length} ${L.candidate}` })])
@@ -825,7 +865,14 @@ window.__ModuleLoader__.load({
           if (!group.length) continue
           body.appendChild(el('h4', { class: 'dsh-ev-section-title', text: label }))
           for (const plan of group) {
-            const item = el('article', { class: 'dsh-ev-record' }, [el('div', { class: 'dsh-ev-record-meta' }, [el('span', { text: scopeName(plan) }), el('span', { text: plan.status === 'pending' ? L.notApplied : statusText(plan.status) })]), el('h4', { text: plan.expectedEffect || L.reviewTitle }), el('p', { class: 'dsh-ev-muted', text: activationText(plan.activation) })])
+            const kinds = (plan.changeKinds || []).map(changeKindName).filter(Boolean)
+            const meta = el('div', { class: 'dsh-ev-record-meta' }, [
+              el('span', { text: scopeName(plan) }),
+              ...kinds.slice(0, 3).map(kind => el('span', { class: 'dsh-ev-pill', text: kind })),
+              ...(plan.fileCount ? [el('span', { text: `${plan.fileCount} ${L.fileUnit}` })] : []),
+              el('span', { text: plan.status === 'pending' ? L.notApplied : statusText(plan.status) }),
+            ])
+            const item = el('article', { class: 'dsh-ev-record' }, [meta, el('h4', { text: plan.headline || (plan.expectedEffect || '').split('\n')[0] || L.reviewTitle }), el('p', { class: 'dsh-ev-muted', text: activationText(plan.activation) })])
             const actions = el('div', { class: 'dsh-ev-actions' }, [actionButton(plan.status === 'pending' ? L.reviewConfirm : L.viewDiff, () => { void showReview(agent.id, plan.id) })])
             if (plan.status === 'applied' && plan.canUndo) actions.appendChild(actionButton(L.undoChange, () => { void undoChange(agent.id, plan) }))
             item.appendChild(actions); body.appendChild(item)
@@ -897,7 +944,7 @@ window.__ModuleLoader__.load({
           body.appendChild(el('p', { class: 'dsh-ev-muted', text: L.noCurrentSession }))
           const select = el('select', { class: 'dsh-ev-select', 'aria-label': L.chooseSession })
           select.appendChild(el('option', { value: '', text: L.chooseSession }))
-          for (const item of agents) select.appendChild(el('option', { value: item.id, text: item.view?.taskTitle || L.session }))
+          for (const item of agents) select.appendChild(el('option', { value: item.id, text: item.view?.workstreamTitle || item.view?.taskTitle || L.session }))
           select.addEventListener('change', () => { setSessionSelection(select.value || null); manualSelection = !!selected; render() }); body.appendChild(select); return
         }
         if (error || !view) {

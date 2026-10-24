@@ -6,18 +6,16 @@
 
 Evo 是 **DeepSeek Harness（DSH）的插件**。安装后照常与 DSH 对话，Evo 会观察有来源的任务要求和交付证据，在后台提出候选 harness、执行比较、合成并重新运行；有充分证据时采用新策略，也可以保留原策略。这里的 harness 指 Agent 的工作指令、任务上下文和原生技能等运行组件。
 
-> **开发预览：`0.2.2-dev.4.public.1`。** 插件能运行学习流程，不代表每次都能提高质量，也没有证据证明已追平 Harness²。请先在可恢复的本地项目和独立 Profile 中试用。
-
 ## 我想直接使用
 
 普通用户可以下载预构建 `.tgz`，**无需克隆本仓库、安装 pnpm 或自己构建**。
 
 1. 安装或准备 **DSH `0.2.1-rc.2`**，并在 DSH 中配置可用的模型。
-2. 从 [Releases](https://github.com/mmj953131361-eng/dsh-evolve/releases) 下载 `dsh-evolve-bundle-0.2.2-dev.4.public.1.tgz`。
+2. 从 [Releases](https://github.com/mmj953131361-eng/dsh-evolve/releases) 下载 `dsh-evolve-bundle-0.2.2-dev.5.tgz`。
 3. 把插件安装到你实际使用的 Profile，例如桌面端的 `desktop`：
 
    ```sh
-   dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.4.public.1.tgz
+   dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.5.tgz
    ```
 
 4. 重启对应 DSH Profile，打开一个本地项目和新会话，正常描述任务。打开 Evo 入口查看学习状态、变化和撤销。
@@ -49,16 +47,6 @@ flowchart LR
 | 指定 Profile | 必须确认目标 Profile 和影响范围 | 经原生配置加载，可能需要重启 |
 
 关闭或推迟确认不代表批准。插件保留用户文件内容，并在目标或版本冲突时拒绝覆盖。当前支持的组件主要是**指令、任务上下文、记忆文本和原生技能**；工具、插件实现、MCP、权限和 Loop 的任意修改尚未进入自动候选与采用流程。
-
-## 当前边界与费用
-
-- 候选实验使用受限本地文件 runner，不能代表完整前台的 shell、网络、任意代码或所有插件能力。
-- 闲置、模型说“完成”和文件存在都不能单独证明任务完成。
-- 长期项目、跨月对话及目标变更管理仍在规划中。
-- 后台实验会额外调用模型。当前默认任务后上限很大：**512M 处理 token、8 小时**；期望的单次输出上限为 1M，实际受模型/API 限制。这些是上限，不是实际用量；开始前请按 [Quickstart](docs/quickstart.md)设置适合自己的额度。
-- 冻结输入和产物的相关内容会发送给你配置的模型服务。本地状态保存在项目的 `.dsh-evolve/`，请勿提交其中的任务快照或凭证。
-
-公开仓库仅提供运行源码、安装包和用户/构建文档；单元测试、测试夹具、任务样例、评测脚本与结果不公开。没有公开证据证明当前版本能够稳定提高任务质量。
 
 ## 文档
 

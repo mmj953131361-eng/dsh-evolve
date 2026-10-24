@@ -26,7 +26,7 @@ export function experimentBudget(task: TaskRun, phase: 'during-task' | 'post-tas
   const probeTimeoutMs = Math.min(5_400_000, Math.max(1_800_000, Number.isFinite(elapsed) ? elapsed * 2 : 0))
   return { ...DEFAULT_EXPERIMENT_BUDGET, maxProcessingTokens, maxProposalInputTokens: proposalInput,
     maxProposalOutputTokens: proposalOutput, probeMaxOutputTokens: POST_TASK_OUTPUT_TOKENS,
-    modelMaxOutputTokens: POST_TASK_OUTPUT_TOKENS, strategyVariants: variants, maxDepth: depth, selectionRounds: 3,
+    modelMaxOutputTokens: POST_TASK_OUTPUT_TOKENS, strategyVariants: variants, maxDepth: depth, selectionRounds: 3, heldOutRuns: 2, heldOutDerivations: 2,
     probeTokens, probeSteps, probeTimeoutMs, maxProbeRuns: slots,
     maxWallMs: Math.min(POST_TASK_WALL_CEILING, slots * probeTimeoutMs + 1_800_000), ...overrides }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@dsh-evolve/loop",
-  "version": "0.2.2-dev.4.public.1",
+  "version": "0.2.2-dev.5",
   "description": "evolve-loop: a source copy of @deepseek-ai/dsh-agent-loop with controlled variation points",
   "type": "module",
   "main": "lib/index.js",
@@ -37,7 +37,7 @@
     "@deepseek-ai/dsh-brand": "0.2.1-rc.2",
     "@deepseek-ai/dsh-util-values": "0.2.1-rc.2",
     "@deepseek-ai/schemastery": "3.18.5",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.5",

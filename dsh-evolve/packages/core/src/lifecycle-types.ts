@@ -7,6 +7,31 @@ export type ExperimentStatus = 'queued' | 'running' | 'pending-validation' | 'se
 export type LessonState = 'hypothesis' | 'task-validated' | 'transfer-supported' | 'revoked'
 export type Effect = 'helped' | 'hurt' | 'no-observed-effect' | 'confounded'
 
+/** A long-lived unit of work in one session; TaskRuns are its phases. */
+export interface WorkstreamCheckpoint {
+  id: string
+  taskId: string
+  at: string
+  artifactHash: string
+  reason: 'delivery-idle' | 'user-continue' | 'manual' | 'completion'
+  status: 'observed' | 'queued' | 'learning' | 'applied' | 'kept-base' | 'stale'
+}
+export interface Workstream {
+  id: string
+  sessionId: string
+  cwd: string
+  /** User-facing convergence of what this session/workspace is doing now. */
+  title: string
+  /** Stable goal identity; appending a continuation does not change it. */
+  goal: string
+  goalHash: string
+  version: number
+  createdAt: string
+  updatedAt: string
+  lastCheckpointAt?: string
+  checkpoints: WorkstreamCheckpoint[]
+}
+
 /** Deterministic checks supplement semantic evaluation; existence alone proves no correctness. */
 export interface Requirement {
   id: string
@@ -71,6 +96,13 @@ export interface ExperimentBudget {
    * only with a strict majority of all rounds; absent on old persisted jobs means one round.
    */
   selectionRounds?: number
+  /**
+   * Fresh-input executions per candidate, with the conversation removed. 0 disables held-out verification;
+   * absent on old persisted jobs means 0, so earlier episodes behave exactly as they did.
+   */
+  heldOutRuns?: number
+  /** How many times the expected results are derived independently; only what all of them agree on can decide. */
+  heldOutDerivations?: number
 }
 export const DEFAULT_EXPERIMENT_BUDGET: ExperimentBudget = Object.freeze({
   maxProcessingTokens: 1_000_000, maxProposalInputTokens: 160_000,
@@ -80,10 +112,16 @@ export const DEFAULT_EXPERIMENT_BUDGET: ExperimentBudget = Object.freeze({
 export interface TaskRun {
   id: string
   sessionId: string
+  /** Long-lived workstream this phase belongs to; absent on legacy tasks. */
+  workstreamId?: string
+  /** Workstream title captured when this phase starts. */
+  title?: string
   prompt: string
   taskType: string
   cwd: string
   status: TaskStatus
+  /** A checkpoint closes a phase without ending the surrounding workstream. */
+  completionKind?: 'task' | 'checkpoint'
   completionEvidence: string
   generation: number
   activeRevision: string | null
@@ -138,6 +176,8 @@ export interface Candidate {
   rollout?: Rollout
 }
 export interface Comparison {
+  /** Set when fresh-input verification changed the outcome of the training-input comparison. */
+  heldOutEffect?: 'vetoed' | 'favoured'
   /** Set only when all compared executions attest the same advertised loading semantics. */
   loaderVersion?: string
   winner: string | null
@@ -164,6 +204,12 @@ export interface Experience {
 export interface EvolutionEpisode {
   id: string
   taskId: string
+  /** Workstream identity and title frozen at dispatch, so history does not drift. */
+  workstreamId?: string
+  title?: string
+  goalHash?: string
+  /** True when the phase ended at a checkpoint rather than final task completion. */
+  checkpoint?: boolean
   phase: 'during-task' | 'post-task'
   trigger: string
   scope: 'full-task' | 'local'
@@ -192,6 +238,8 @@ export interface EvolutionEpisode {
   reservations: Reservation[]
   candidates: Candidate[]
   comparison?: Comparison
+  /** Fresh-input verification of the compared candidates; absent when it did not run. */
+  heldOut?: import('./holdout.js').HeldOutRecord
   /** Frozen before dispatch; cached answers must never be interpreted under fresh labels. */
   selectionInputs?: Record<string, {
     labels: Record<string, string>
@@ -214,6 +262,8 @@ export interface LifecycleState {
   episodes: Record<string, EvolutionEpisode>
   experiences: Record<string, Experience>
   recommendations: Record<string, string>
+  /** Optional so existing schema-2 journals remain readable without migration. */
+  workstreams?: Record<string, Workstream>
 }
 export interface ModelCall {
   stage: string
