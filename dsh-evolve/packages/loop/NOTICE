@@ -1,0 +1,19 @@
+# NOTICE
+
+`@dsh-evolve/loop` contains a modified source copy of
+`@deepseek-ai/dsh-agent-loop` from the DeepSeek Harness repository
+(https://github.com/deepseek-ai/deepseek-harness), licensed under the MIT
+License. Copyright (c) DeepSeek AI.
+
+Modifications relative to the upstream source:
+
+- Package name changed to `@dsh-evolve/loop`.
+- Relative import specifiers use the emitted `.js` extension so the package can
+  be built with `tsc` outside the DSH workspace.
+- Workspace dependency specifiers were replaced with published exact versions.
+- Variation points are added only where they default to stock behavior.
+
+The upstream MIT license text is reproduced in this package as `LICENSE`
+and in the repository as `licenses/MIT-DeepSeek.txt`.
+
+Upstream changes require private regression validation before publication.

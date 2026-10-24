@@ -1,0 +1,17 @@
+# Example bounded trial, not a guarantee that every experiment can finish.
+# Review provider pricing/limits before using it. Adapt budgets to your task.
+- id: evolve-core
+  config:
+    enabled: true
+- id: evolve-agent
+  config:
+    enabled: true
+    automaticLifecycle: true
+    worker: true
+    postTaskMaxProcessingTokens: 2000000
+    postTaskMaxWallMs: 900000
+    postTaskStrategyVariants: 1
+    postTaskMaxDepth: 2
+    maxProposalTokens: 16384
+    probeMaxOutputTokens: 16384
+    automaticMaxProcessingTokens: 100000

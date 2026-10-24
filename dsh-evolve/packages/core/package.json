@@ -1,0 +1,131 @@
+{
+  "name": "@dsh-evolve/core",
+  "version": "0.2.2-dev.4.public.1",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json",
+    "./ids": {
+      "types": "./lib/types/ids.d.ts",
+      "default": "./lib/ids.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types.js"
+    },
+    "./tree": {
+      "types": "./lib/types/tree.d.ts",
+      "default": "./lib/tree.js"
+    },
+    "./surface": {
+      "types": "./lib/types/surface.d.ts",
+      "default": "./lib/surface.js"
+    },
+    "./revision": {
+      "types": "./lib/types/revision.d.ts",
+      "default": "./lib/revision.js"
+    },
+    "./revision-store": {
+      "types": "./lib/types/revision-store.d.ts",
+      "default": "./lib/revision-store.js"
+    },
+    "./validator": {
+      "types": "./lib/types/validator.d.ts",
+      "default": "./lib/validator.js"
+    },
+    "./library": {
+      "types": "./lib/types/library.d.ts",
+      "default": "./lib/library.js"
+    },
+    "./policy": {
+      "types": "./lib/types/policy.d.ts",
+      "default": "./lib/policy.js"
+    },
+    "./applier": {
+      "types": "./lib/types/applier.d.ts",
+      "default": "./lib/applier.js"
+    },
+    "./plugin": {
+      "types": "./lib/types/plugin.d.ts",
+      "default": "./lib/plugin.js"
+    },
+    "./lifecycle": {
+      "types": "./lib/types/lifecycle.d.ts",
+      "default": "./lib/lifecycle.js"
+    },
+    "./lifecycle-types": {
+      "types": "./lib/types/lifecycle-types.d.ts",
+      "default": "./lib/lifecycle-types.js"
+    },
+    "./task-snapshot": {
+      "types": "./lib/types/task-snapshot.d.ts",
+      "default": "./lib/task-snapshot.js"
+    },
+    "./persistence": {
+      "types": "./lib/types/persistence.d.ts",
+      "default": "./lib/persistence.js"
+    },
+    "./experiment-budget": {
+      "types": "./lib/types/experiment-budget.d.ts",
+      "default": "./lib/experiment-budget.js"
+    },
+    "./native-components": {
+      "types": "./lib/types/native-components.d.ts",
+      "default": "./lib/native-components.js"
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2",
+    "@deepseek-ai/schemastery": "3.18.5",
+    "@deepseek-ai/dsh-tool-skill": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.2.1-rc.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2",
+    "@deepseek-ai/schemastery": "3.18.5",
+    "@deepseek-ai/dsh-agent-loop": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session-projection": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-fs-local": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-working-directory": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tool-skill": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.2.1-rc.2",
+    "@deepseek-ai/cordis-plugin-loader": "1.0.6",
+    "@deepseek-ai/cordis-plugin-group": "1.0.5"
+  },
+  "dependencies": {
+    "yaml": "2.9.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-agent-preset-registry": {
+      "optional": true
+    }
+  },
+  "license": "(MIT AND Apache-2.0)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mmj953131361-eng/dsh-evolve.git",
+    "directory": "dsh-evolve/packages/core"
+  }
+}

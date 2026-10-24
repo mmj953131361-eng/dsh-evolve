@@ -1,0 +1,9 @@
+# First verify installation without Evo model calls.
+- id: evolve-core
+  config:
+    enabled: false
+- id: evolve-agent
+  config:
+    enabled: false
+    automaticLifecycle: false
+    worker: false

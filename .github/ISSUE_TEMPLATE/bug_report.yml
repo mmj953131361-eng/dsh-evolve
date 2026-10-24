@@ -1,0 +1,30 @@
+name: Bug report / 问题反馈
+description: Report a reproducible plugin or installation problem.
+body:
+  - type: markdown
+    attributes:
+      value: "Do not attach tests, fixtures, evaluation materials, API keys or private task content. Report vulnerabilities privately through the Security tab. / 请先脱敏；安全漏洞请私密报告。"
+  - type: textarea
+    id: versions
+    attributes:
+      label: Environment / 环境
+      description: Evo version, DSH version, OS/architecture, Profile type, Node version.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce / 复现步骤
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual behavior / 预期与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitised evidence / 脱敏证据
+      description: Minimal error, relevant diff or screenshot. Do not attach tests, fixtures, evaluation cases/results or whole runtime snapshots.

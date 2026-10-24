@@ -1,0 +1,36 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/core"
+    },
+    {
+      "path": "./packages/loop"
+    },
+    {
+      "path": "./packages/observer"
+    },
+    {
+      "path": "./packages/agent"
+    },
+    {
+      "path": "./packages/commands"
+    },
+    {
+      "path": "./packages/tools"
+    },
+    {
+      "path": "./packages/sandbox"
+    },
+    {
+      "path": "./packages/probe"
+    },
+    {
+      "path": "./packages/ui"
+    }
+  ]
+}

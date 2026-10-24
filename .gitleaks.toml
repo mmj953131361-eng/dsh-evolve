@@ -1,0 +1,7 @@
+[extend]
+useDefault = true
+[[rules]]
+id = "ark-runtime-key"
+description = "Ark runtime credential"
+regex = '''\bark-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:-[A-Za-z0-9]+)?\b'''
+keywords = ["ark-"]

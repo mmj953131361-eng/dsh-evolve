@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "lib",
+    "tsBuildInfoFile": "lib/.tsbuildinfo",
+    "types": [
+      "node"
+    ],
+    "verbatimModuleSyntax": false,
+    "isolatedModules": false,
+    "declarationDir": "lib/types"
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}

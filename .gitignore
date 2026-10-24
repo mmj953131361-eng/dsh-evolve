@@ -1,0 +1,49 @@
+# External reference checkouts: pinned in references.lock.json.
+/deepseek-harness/
+/harness2/
+# Per-worktree runs, release artifacts and local runtime state.
+/.evaluation/
+/.worktrees/
+/artifacts/
+**/node_modules/
+**/.pnpm-store/
+**/.venv/
+**/__pycache__/
+**/.dsh-evolve/
+**/.DS_Store
+*.pyc
+*.tsbuildinfo
+*.tgz
+*.tar.gz
+# Never commit credentials or local provider overrides.
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+# Keep future raw benchmark output out of source history.
+dsh-evolve/eval/*/runs/
+dsh-evolve/eval/*/runs-real/
+# Local agent/browser tooling.
+/.playwright-mcp/
+/.zcode/
+/.codex/
+# Copied into the installable bundle by its build step.
+/dsh-evolve/packages/bundle/LICENSES/
+/dsh-evolve/packages/bundle/THIRD_PARTY_NOTICES.md
+
+# Private-only development and evaluation content; publication gate also rejects these.
+**/tests/
+**/test/
+**/fixtures/
+**/__fixtures__/
+**/__tests__/
+**/*.spec.*
+**/*.test.*
+/dsh-evolve/eval/
+/dsh-evolve/spikes/
+/PRD.md
+**/reports/
+**/runs/
+**/runs-real/

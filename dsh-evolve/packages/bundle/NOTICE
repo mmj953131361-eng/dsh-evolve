@@ -1,0 +1,16 @@
+DSH Evo
+Copyright (c) 2026 dsh-evolve contributors
+
+Original Evo work is MIT licensed. Third-party material retains its upstream terms.
+
+Includes modified Agent Loop material from DeepSeek Harness,
+Copyright (c) 2026 DeepSeek, MIT License. Changes include package/import names,
+pinned dependencies and controlled variation markers. See the loop NOTICE.
+
+Includes selector instructions adapted from Google Research Harness²
+core/prompts.py, Copyright 2026 Google LLC, Apache License 2.0.
+Changes include JSON output, computed evidence, quote verification and abstention.
+Harness² also informs the Propose–Probe–Compose and experience methodology.
+
+See THIRD_PARTY_NOTICES.md and the accompanying full third-party licenses
+(licenses/ in the repository; LICENSES/ in the installable bundle).

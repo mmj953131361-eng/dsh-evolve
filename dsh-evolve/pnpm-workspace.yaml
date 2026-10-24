@@ -1,0 +1,11 @@
+packages:
+  - packages/*
+
+allowBuilds:
+  esbuild: true
+  # Native FFI dep of the fs provider; its prebuilt binary works without the
+  # postinstall, so deny the script explicitly (same policy as the DSH repo).
+  koffi: false
+  # Worker uses the OpenAI-compatible route; no optional provider build scripts.
+  '@google/genai': false
+  protobufjs: false

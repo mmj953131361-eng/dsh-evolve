@@ -1,0 +1,109 @@
+{
+  "name": "@dsh-evolve/bundle",
+  "version": "0.2.2-dev.4.public.1",
+  "description": "Self-evolving harness scaffolding for DeepSeek Harness",
+  "type": "module",
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "NOTICE",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "LICENSES"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "engines": {
+    "dsh": ">=0.2.1-rc.2 <0.3.0"
+  },
+  "exports": {
+    ".": "./lib/ui.js",
+    "./ui": "./lib/ui.js",
+    "./core": "./lib/core.js",
+    "./observer": "./lib/observer.js",
+    "./probe": "./lib/probe.js",
+    "./sandbox": "./lib/sandbox.js",
+    "./agent": "./lib/agent.js",
+    "./tools": "./lib/tools.js",
+    "./commands": "./lib/commands.js",
+    "./loop": "./lib/loop.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./worker": "./lib/worker.js",
+    "./scoped-harness": "./lib/scoped-harness.js"
+  },
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "yaml": "2.9.1",
+    "zod": "4.4.3",
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-agent-loop": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session-projection": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-fs-local": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-working-directory": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.2.1-rc.2",
+    "@deepseek-ai/schemastery": "3.18.5",
+    "@deepseek-ai/dsh-tool-skill": "0.2.1-rc.2"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-brand": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-util-values": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-scope": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session-persistence": "0.2.1-rc.2"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
+    "@deepseek-ai/schemastery": "3.18.5",
+    "@dsh-evolve/core": "workspace:*",
+    "@dsh-evolve/observer": "workspace:*",
+    "@dsh-evolve/agent": "workspace:*",
+    "@dsh-evolve/tools": "workspace:*",
+    "@dsh-evolve/commands": "workspace:*",
+    "@dsh-evolve/sandbox": "workspace:*",
+    "esbuild": "0.28.2",
+    "@deepseek-ai/dsh-brand": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-util-values": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-scope": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session-persistence": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session-projection": "0.2.1-rc.2",
+    "@dsh-evolve/probe": "workspace:*",
+    "@dsh-evolve/ui": "workspace:*",
+    "@deepseek-ai/dsh-agent-loop": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-fs-local": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-working-directory": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm-pi-ai": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tool-skill": "0.2.1-rc.2"
+  },
+  "main": "lib/ui.js",
+  "bin": {
+    "dsh-evolve-worker": "lib/worker.js"
+  },
+  "license": "(MIT AND Apache-2.0)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mmj953131361-eng/dsh-evolve.git",
+    "directory": "dsh-evolve/packages/bundle"
+  }
+}
