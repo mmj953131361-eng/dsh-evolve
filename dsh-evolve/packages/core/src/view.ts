@@ -65,6 +65,8 @@ export function deriveWorkstreamTitle(prompt: string, fallback = 'Current work')
 
 /** Only translate known causes; an advertised output ceiling is not proof it was reached. */
 export function failureReason(detail: string): ViewText {
+  if (/Automatic task-observation call budget exhausted/i.test(detail)) return message('当前这版任务要求的观察次数已达上限。补充或修改要求后可继续观察，当前策略保持不变。', 'Observation reached the call limit for the current task requirements. Updated requirements can be observed; the current strategy is unchanged.')
+  if (/Automatic task-observation token budget exhausted/i.test(detail)) return message('当前任务的观察 token 预算已用完，自动观察已暂停，当前策略保持不变。', 'This task used its observation token budget. Automatic observation is paused; the current strategy is unchanged.')
   if (/budget.*exhaust|exceed.*budget|预算.*耗尽/i.test(detail)) return message('本次学习已用完设定的预算，当前策略保持不变。', 'This learning attempt used its budget. The current strategy is unchanged.')
   if (/unknown external|interrupted external|in.flight|lost.*lease/i.test(detail)) return message('上次请求被中断，无法确认是否完成。重试可能产生额外消耗。', 'The previous request was interrupted and its outcome is unknown. Retrying may add cost.')
   if (/max[- ]?tokens|output limit reached|output.*limit.*exceed/i.test(detail)) return message('模型在输出完整结果前达到了单次输出限制。', 'The model reached its response limit before finishing.')

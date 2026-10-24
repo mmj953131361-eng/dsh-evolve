@@ -1,6 +1,6 @@
 {
   "name": "@dsh-evolve/core",
-  "version": "0.2.2-dev.5",
+  "version": "0.2.2-dev.6",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

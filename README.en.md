@@ -11,11 +11,11 @@ Evo observes grounded requirements and delivery evidence, proposes candidate har
 You do not need to build this repository to try Evo.
 
 1. Prepare DSH **`0.2.1-rc.2`** with a working model route. See the [DSH project](https://github.com/deepseek-ai/deepseek-harness).
-2. Download `dsh-evolve-bundle-0.2.2-dev.5.tgz` from [Releases](https://github.com/mmj953131361-eng/dsh-evolve/releases).
+2. Download `dsh-evolve-bundle-0.2.2-dev.6.tgz` from [Releases](https://github.com/mmj953131361-eng/dsh-evolve/releases).
 3. Install it into the Profile you actually use (for example, `desktop`):
 
    ```sh
-   dsh plugin --profile desktop add /absolute/download/path/dsh-evolve-bundle-0.2.2-dev.5.tgz
+   dsh plugin --profile desktop add /absolute/download/path/dsh-evolve-bundle-0.2.2-dev.6.tgz
    ```
 
 4. Restart that Profile, open a local project and a fresh conversation, then work normally. The Evo entry shows learning status, changes and undo. A queued job has not executed yet; KEEP_BASE means no challenger was adopted.
