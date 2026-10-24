@@ -14,7 +14,7 @@ pnpm typecheck
 pnpm build
 mkdir -p dist
 pnpm --filter @dsh-evolve/bundle pack --pack-destination "$PWD/dist"
-python3 ../scripts/check-publication.py dist/dsh-evolve-bundle-0.2.2-dev.6.tgz
+python3 ../scripts/check-publication.py dist/dsh-evolve-bundle-0.2.2-dev.10.tgz
 ```
 
 No live model or credential is needed for these checks. Install the generated bundle only in a separate DSH Profile.

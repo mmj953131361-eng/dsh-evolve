@@ -11,11 +11,11 @@ Evo 是 **DeepSeek Harness（DSH）的插件**。安装后照常与 DSH 对话�
 普通用户可以下载预构建 `.tgz`，**无需克隆本仓库、安装 pnpm 或自己构建**。
 
 1. 安装或准备 **DSH `0.2.1-rc.2`**，并在 DSH 中配置可用的模型。
-2. 从 [Releases](https://github.com/mmj953131361-eng/dsh-evolve/releases) 下载 `dsh-evolve-bundle-0.2.2-dev.6.tgz`。
+2. 从 [Releases](https://github.com/mmj953131361-eng/dsh-evolve/releases) 下载 `dsh-evolve-bundle-0.2.2-dev.10.tgz`。
 3. 把插件安装到你实际使用的 Profile，例如桌面端的 `desktop`：
 
    ```sh
-   dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.6.tgz
+   dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.10.tgz
    ```
 
 4. 重启对应 DSH Profile，打开一个本地项目和新会话，正常描述任务。打开 Evo 入口查看学习状态、变化和撤销。

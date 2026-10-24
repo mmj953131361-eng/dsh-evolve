@@ -4,7 +4,7 @@ import type { TaskRun } from './lifecycle-types.js'
 
 export interface ViewText { zh: string; en: string }
 export interface EvolutionView {
-  state: 'idle' | 'running' | 'queued' | 'learning' | 'kept-base' | 'selected' | 'pending-adoption' | 'failed' | 'paused'
+  state: 'idle' | 'running' | 'queued' | 'learning' | 'kept-base' | 'selected' | 'pending-adoption' | 'failed' | 'timed-out' | 'output-limited' | 'format-failed' | 'cancelled' | 'paused'
   title: ViewText
   /** Persistent convergence of the session/workspace work, not the first prompt. */
   workstreamTitle?: string
@@ -65,6 +65,8 @@ export function deriveWorkstreamTitle(prompt: string, fallback = 'Current work')
 
 /** Only translate known causes; an advertised output ceiling is not proof it was reached. */
 export function failureReason(detail: string): ViewText {
+  if (/completion evidence failed exact citation validation/i.test(detail)) return message('完成核查的引用仍无法与实际交付物对应，任务尚未被判为完成。可以查看原因或重试核查。', 'Completion citations still do not match the actual deliverables. The task has not been accepted as complete; review the cause or retry verification.')
+  if (/observation (?:repeatedly )?aborted upstream/i.test(detail)) return message('观察服务连续中断，自动重试后仍未恢复。已有需求和调用记录会保留，可以稍后重试。', 'The observation service kept interrupting requests after automatic retries. Existing requirements and call records are retained; you can retry later.')
   if (/Automatic task-observation call budget exhausted/i.test(detail)) return message('当前这版任务要求的观察次数已达上限。补充或修改要求后可继续观察，当前策略保持不变。', 'Observation reached the call limit for the current task requirements. Updated requirements can be observed; the current strategy is unchanged.')
   if (/Automatic task-observation token budget exhausted/i.test(detail)) return message('当前任务的观察 token 预算已用完，自动观察已暂停，当前策略保持不变。', 'This task used its observation token budget. Automatic observation is paused; the current strategy is unchanged.')
   if (/budget.*exhaust|exceed.*budget|预算.*耗尽/i.test(detail)) return message('本次学习已用完设定的预算，当前策略保持不变。', 'This learning attempt used its budget. The current strategy is unchanged.')
@@ -119,6 +121,23 @@ export function buildEvolutionView(snapshot: Omit<AgentSnapshot, 'view'>,
   }
   const observationFailed = context.agentStatus !== 'running' && ['paused', 'failed', 'budget-exhausted', 'pending-validation'].includes(automation?.status ?? '')
   const jobFailed = job && ['failed', 'budget-exhausted', 'pending-validation'].includes(job.status)
+  const activeTask = task && ['active', 'awaiting-input'].includes(task.status)
+  if (task?.status === 'cancelled') return { ...view, state: 'cancelled',
+    title: message('已随任务取消观察', 'Observation stopped with the task'),
+    summary: message('本任务的后台观察已停止，不会继续重试或进入学习队列。调用用量尚未确认时会保留预留费用，这不表示仍在运行。', 'Background observation for this task has stopped and will not retry or queue learning. Unknown usage remains reserved; it does not mean a call is still running.'),
+    primaryAction: null, canUndo: false }
+  if (automation?.status === 'format-failed' && activeTask && !jobFailed) return { ...view, state: 'format-failed',
+    title: message('模型响应格式修复未成功', 'Model response format recovery failed'),
+    summary: message('一次自动格式重试后仍未得到有效 JSON。已核验的需求和证据会保留；下一条消息或重试可继续，尚未确认任务完成。', 'One automatic format retry did not produce valid JSON. Verified requirements and evidence are retained. Your next message or a retry can resume; completion is not confirmed.'),
+    detail: automation.detail ?? null, primaryAction: { kind: 'retry-observation' } }
+  if (automation?.status === 'output-limited' && activeTask && !jobFailed) return { ...view, state: 'output-limited',
+    title: message('完成核查需要继续', 'Completion check needs to continue'),
+    summary: message('模型输出达到上限，尚未确认任务完成。已核验的分片和需求会保留；下一条消息或重试可接续未完成的核查。', 'The model reached its output limit; task completion is not confirmed. Verified batches and requirements are saved. Your next message or a retry can resume unfinished checks.'),
+    detail: automation.detail ?? null, primaryAction: { kind: 'retry-observation' } }
+  if (automation?.status === 'timed-out' && activeTask && !jobFailed) return { ...view, state: 'timed-out',
+    title: message('观察暂时超时', 'Observation timed out'),
+    summary: message('已完成的需求、完成核查分片与引用会保留。下一条用户消息或手动重试可接续剩余观察，当前策略保持不变。', 'Completed requirement batches and citations are retained. Your next message or a manual retry can resume the remaining observation. The current strategy is unchanged.'),
+    detail: automation.detail ?? null, primaryAction: { kind: 'retry-observation' } }
   if (jobFailed || observationFailed) {
     const detail = jobFailed ? job.reason : automation?.detail ?? ''
     const noRetry = automation?.status === 'budget-exhausted' || job?.status === 'budget-exhausted' || /budget.*exhaust|observation.*budget|snapshot|frozen.*input|source.*hash|local bound|401|403|unauthori|authentication/i.test(detail)
@@ -128,11 +147,18 @@ export function buildEvolutionView(snapshot: Omit<AgentSnapshot, 'view'>,
       primaryAction: noRetry ? job ? { kind: 'view-comparison', id: job.id } : null
         : jobFailed ? { kind: 'retry-experiment', id: job.id } : { kind: 'retry-observation' } }
   }
-  const activeTask = task && ['active', 'awaiting-input'].includes(task.status)
   if (activeTask) return { ...view, state: 'running',
-    title: task.status === 'awaiting-input' ? message('任务等待你的回复', 'Task awaiting your reply')
+    title: automation?.status === 'repairing-format' ? message('正在修复模型响应格式', 'Recovering model response format')
+      : automation?.status === 'repairing-evidence' ? message('正在校正完成证据', 'Checking completion citations')
+      : automation?.status === 'retrying' ? message('观察中断，正在自动重试', 'Observation interrupted; retrying automatically')
+      : automation?.status === 'input-updated' ? message('要求已更新，正在重新观察', 'Requirements updated; resuming observation')
+      : task.status === 'awaiting-input' ? message('任务等待你的回复', 'Task awaiting your reply')
       : automation?.status === 'checking-completion' ? message('正在核对任务是否完成', 'Checking task completion') : message('任务进行中', 'Task in progress'),
-    summary: job?.status === 'running'
+    summary: automation?.status === 'repairing-format' ? message('正在根据同一份材料重新生成有效 JSON；不会更改验收要求，也不会接受不完整的结果。', 'Regenerating valid JSON from the same evidence. Acceptance criteria remain unchanged; incomplete responses are not accepted.')
+      : automation?.status === 'repairing-evidence' ? message('正在重新核对交付物引用；只有证据检查通过，才会开始后台学习。', 'Deliverable citations are being checked again. Background learning starts only after the evidence is accepted.')
+      : automation?.status === 'retrying' ? message('已有需求证据会保留，正在重试后台观察；你可以继续工作。', 'Existing requirement evidence is retained while background observation retries. You can continue working.')
+      : automation?.status === 'input-updated' ? message('旧输入的观察已停止，将按最新要求继续；无需手动重试。', 'Observation of the old input stopped and will resume for the latest requirements. No manual retry is needed.')
+      : job?.status === 'running'
       ? message('任务继续进行，后台正在比较策略；目前无需操作。', 'Your task continues while strategies are compared in the background. No action is needed.')
       : message('任务完成后会自动学习，目前不需要操作进化面板。', 'Learning starts automatically after completion. No action is needed in this panel.') }
   if (job?.status === 'running') return { ...view, state: 'learning', title: message('正在比较改进策略', 'Comparing strategies'),

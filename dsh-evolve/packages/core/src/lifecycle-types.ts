@@ -270,11 +270,13 @@ export interface ModelCall {
   prompt: string
   maxTokens: number
   signal: AbortSignal
+  /** Stream activity only; never persist private reasoning text. */
+  onProgress?(progress: { firstActivityAt?: string; lastActivityAt?: string; textChars: number; reasoningChars: number }): void
 }
 export interface ExperimentModel {
   /** Resolve a route-aware output allowance before reserving/dispatching. */
   outputLimit?(prompt: string, requested: number, signal: AbortSignal): Promise<number>
-  complete(input: ModelCall): Promise<{ text: string; usage?: Usage; error?: string }>
+  complete(input: ModelCall): Promise<{ text: string; usage?: Usage; error?: string; finishReason?: string; failure?: { code: string; message: string } }>
 }
 export interface ExperimentRunner {
   /** Declarative restriction description, backed by enforced runner behavior. */
