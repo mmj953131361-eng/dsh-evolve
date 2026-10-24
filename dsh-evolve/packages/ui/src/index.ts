@@ -199,6 +199,7 @@ function registerRoutes(ctx: Context, child: Context, server: WebServerLike): vo
           cancel(agent: Agent, id: string): Promise<void>
           resume(agent: Agent, id: string): Promise<void>
           retryObservation(agent: Agent): Promise<void>
+          checkpoint(agent: Agent): Promise<{ ok: boolean; episodeId?: string; reason: string }>
         }>(ctx, 'evolveAgent')
         const sandbox = optionalService<{
           approve(agent: Agent, id: string): Promise<unknown>
@@ -211,6 +212,9 @@ function registerRoutes(ctx: Context, child: Context, server: WebServerLike): vo
             if (!evolveAgent?.retryObservation) return json(res, 409, { error: 'automatic observation retry is unavailable' })
             await evolveAgent.retryObservation(agent)
             return json(res, 200, { ok: true })
+          case 'checkpoint':
+            if (!evolveAgent?.checkpoint) return json(res, 409, { error: 'checkpoint is unavailable' })
+            return json(res, 200, await evolveAgent.checkpoint(agent))
           case 'adoption-approve':
           case 'adoption-reject':
           case 'adoption-undo': {

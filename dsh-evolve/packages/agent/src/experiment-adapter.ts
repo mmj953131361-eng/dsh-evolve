@@ -53,6 +53,31 @@ export function experimentModel(ctx: Context, provider: string, model: string): 
 
 const OUTPUT = { schema: { type: 'string' as const }, render: (_args: unknown, value: string) => [{ type: 'text' as const, text: value }] }
 const TOOL_NAMES = new Set(['probe_read', 'probe_write', 'probe_list', 'skill'])
+const PROBE_PRESET = 'evolve-probe-internal'
+
+/** Hide one probe session from the workspace list; storage remains auditable. */
+export async function archiveProbeSession(ctx: Context, id: unknown): Promise<void> {
+  try {
+    const registry = (ctx as unknown as { get?: (name: string) => unknown }).get?.call(ctx, 'workspaceRegistry') as
+      { archiveSession?(id: unknown, options?: { stopActivity?: boolean }): Promise<void> } | undefined
+    await registry?.archiveSession?.(id, { stopActivity: true })
+  } catch (error) { ctx.logger?.warn?.('evolve: could not archive probe session: %o', error) }
+}
+
+/** Archive probe sessions left by earlier plugin runs (best effort, host only). */
+export async function archiveExistingProbeSessions(ctx: Context): Promise<void> {
+  try {
+    const persistence = (ctx as unknown as { get?: (name: string) => unknown }).get?.call(ctx, 'sessionPersistence') as
+      { list?(): Promise<readonly { header?: { id?: unknown; agentPreset?: string } }[]> } | undefined
+    const live = new Set(((ctx as unknown as { agents?: { list?(): { session: { id: unknown } }[] } }).agents?.list?.() ?? [])
+      .map(agent => String(agent.session.id)))
+    for (const stored of await persistence?.list?.() ?? []) {
+      if (stored.header?.agentPreset === PROBE_PRESET && stored.header.id !== undefined && !live.has(String(stored.header.id))) {
+        await archiveProbeSession(ctx, stored.header.id)
+      }
+    }
+  } catch (error) { ctx.logger?.warn?.('evolve: could not scan probe sessions: %o', error) }
+}
 
 /** No shell, network, plugin loading, code execution or delegation capability. */
 export function localFileRunner(ctx: Context, provider: string, model: string): ExperimentRunner {
@@ -76,6 +101,8 @@ export function localFileRunner(ctx: Context, provider: string, model: string): 
       let steps = 0; let toolCalls = 0; let toolErrors = 0; let limited = false; let failure = ''; let ceiling: Rollout['limit']
       let answer = ''; const trace: string[] = []; const written = new Set<string>()
       const usage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+      const fallbackUsage: Usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
+      let messageUsage = false
       let truncated = false; let recoveries = 0; let writeQueue: Promise<unknown> = Promise.resolve()
       const outputLimit = input.maxOutputTokens ?? 1_000_000
       if (!Number.isSafeInteger(outputLimit) || outputLimit < 1) throw new Error('invalid probe output limit')
@@ -83,7 +110,7 @@ export function localFileRunner(ctx: Context, provider: string, model: string): 
       let charged = 0; let pendingMaximum = 0; let unknownUsage = false
       const handle = await ctx.agents.create({
         sessionId: SessionId(`evolve-probe-${randomUUID()}`),
-        meta: { cwd: input.directory, agentPreset: 'evolve-probe-internal' },
+        meta: { cwd: input.directory, agentPreset: PROBE_PRESET },
         agentOptions: { provider, model, maxTokens: outputLimit }, signal,
         setup: async scope => {
           // Global end-capabilities are invisible; a guard also blocks scoped
@@ -183,8 +210,9 @@ export function localFileRunner(ctx: Context, provider: string, model: string): 
             const chunk = frame.chunk
             if (chunk.type === 'text-delta') answer += chunk.text
             if (chunk.type === 'usage') {
-              for (const key of ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens'] as const) usage[key] = (usage[key] ?? 0) + (chunk.usage[key] ?? 0)
-              charged += processingTokens(chunk.usage); pendingMaximum = 0
+              // Streaming usage is a fallback. The durable assistant/message
+              // event below is authoritative and avoids double counting.
+              for (const key of ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens'] as const) fallbackUsage[key] = (fallbackUsage[key] ?? 0) + (chunk.usage[key] ?? 0)
             }
             if (chunk.type === 'finish' && chunk.reason.kind === 'max-tokens') { truncated = true; trace.push('[OUTPUT_LIMIT] model output truncated; completion not established') }
           })
@@ -207,6 +235,15 @@ export function localFileRunner(ctx: Context, provider: string, model: string): 
         pendingMaximum = maximum
         return next()
       })
+      const disposeUsage = ctx.on('session/event', (session, event) => {
+        if (String(session.id) !== String(handle.agent.session.id) || event.type !== 'assistant/message') return
+        const reported = (event.data as { usage?: Usage } | undefined)?.usage
+        if (reported === undefined) return
+        messageUsage = true
+        for (const key of ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens'] as const) usage[key] = (usage[key] ?? 0) + (reported[key] ?? 0)
+        charged += processingTokens(reported)
+        pendingMaximum = 0
+      })
       const abort = () => handle.agent.cancel({ kind: 'user' })
       signal.addEventListener('abort', abort, { once: true })
       try {
@@ -225,14 +262,24 @@ export function localFileRunner(ctx: Context, provider: string, model: string): 
         const artifacts: Record<string, string> = {}
         for (const path of written) artifacts[path] = await readFile(await safeTaskPath(input.directory, path), 'utf8')
         const checks = await checkRequirements(input.directory, input.task.requirements)
+        const reportedUsage = messageUsage ? usage
+          : Object.values(fallbackUsage).some(value => value > 0) ? fallbackUsage : undefined
         const result: Rollout = {
           loaderVersion: NATIVE_DISCLOSURE_VERSION,
           status: input.signal.aborted ? 'cancelled' : timeout.aborted ? 'timeout' : limited || failure ? 'failed' : 'completed',
           answer, artifacts, checks, trace: trace.join('\n'), steps, toolCalls, toolErrors,
-          wallMs: Date.now() - started, ...(unknownUsage ? {} : { usage }), ...(failure ? { reason: failure } : {}), ...(ceiling ? { limit: ceiling } : {}),
+          wallMs: Date.now() - started, ...(reportedUsage === undefined || unknownUsage ? {} : { usage: reportedUsage }),
+          ...(failure ? { reason: failure } : {}), ...(ceiling ? { limit: ceiling } : {}),
         }
         return result
-      } finally { disposeBudget(); signal.removeEventListener('abort', abort); await handle.dispose() }
+      } finally {
+        disposeBudget(); disposeUsage(); signal.removeEventListener('abort', abort)
+        const sessionId = handle.agent.session.id
+        await handle.dispose()
+        // Probe sessions are evidence, not user conversations. Their facts are
+        // already copied into the rollout, so hide them from the workspace list.
+        await archiveProbeSession(ctx, sessionId)
+      }
     },
   }
 }

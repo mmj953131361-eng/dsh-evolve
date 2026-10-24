@@ -1,10 +1,10 @@
 /** Evidence-driven task lifecycle and restartable INV/DOM/compose experiments. */
 import { randomUUID } from 'node:crypto'
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { mkdtemp, mkdir, rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { JsonJournal, readJson, atomicJson, withLock } from './persistence.js'
-import { captureTaskSnapshot, digest, restoreTaskSnapshot, excludedTaskPath } from './task-snapshot.js'
+import { captureTaskSnapshot, digest, restoreTaskSnapshot, excludedTaskPath, safeTaskPath } from './task-snapshot.js'
 import { experimentBudget } from './experiment-budget.js'
 import { candidateEvidence, comparableCandidate, eligibleCandidate, parseQuotes, selectionInstructions, tally, verifyQuotes } from './selection.js'
 export { experimentBudget } from './experiment-budget.js'
@@ -12,13 +12,18 @@ import { validateTree, DEFAULT_LIMITS, type ValidationLimits } from './validator
 import { contentHash, type HarnessTree } from './tree.js'
 import { unsupportedNativePaths } from './native-components.js'
 import { taskEvidenceHash } from './scope-evidence.js'
-import { taskTitle } from './view.js'
+import { deriveWorkstreamTitle, isContinuationText, taskTitle } from './view.js'
+import {
+  HELD_OUT_LIMITS, cellsOf, deliverablePaths, derivePrompt, evaluateExpectations, finalChoice, freshPrompt, inputPrompt, isConclusive,
+  isReplaceableInput, mergeDerivations, parseFiles, standings, universallyMissed, validateHeldOutInput, verdictOf,
+  type Expectation, type HeldOutRecord, type HeldOutRun,
+} from './holdout.js'
 import type { Autonomy } from './policy.js'
 import {
   DEFAULT_EXPERIMENT_BUDGET,
   type Candidate, type Comparison, type EvolutionEpisode, type Experience,
   type ExperimentBudget, type ExperimentModel, type ExperimentRunner, type LifecycleState,
-  type ProgressSnapshot, type Requirement, type Reservation, type TaskRun, type TaskStatus, type Usage,
+  type ProgressSnapshot, type Requirement, type Reservation, type Rollout, type TaskRun, type TaskStatus, type Usage, type Workstream, type WorkstreamCheckpoint,
 } from './lifecycle-types.js'
 export * from './lifecycle-types.js'
 export * from './task-snapshot.js'
@@ -49,6 +54,27 @@ function parseTree(value: unknown): HarnessTree {
 }
 class Paused extends Error { constructor(readonly status: ExperimentStatus, reason: string) { super(reason) } }
 
+/** One session/workspace workstream; legacy journals are upgraded lazily. */
+function ensureWorkstream(state: LifecycleState, sessionId: string, cwd: string, seed: string): Workstream {
+  state.workstreams ??= {}
+  const existing = Object.values(state.workstreams).find(value => value.sessionId === sessionId && value.cwd === cwd)
+  if (existing) return existing
+  const at = now()
+  const workstream: Workstream = {
+    id: randomUUID(), sessionId, cwd, title: deriveWorkstreamTitle(seed), goal: seed,
+    goalHash: digest(seed), version: 1, createdAt: at, updatedAt: at, checkpoints: [],
+  }
+  state.workstreams[workstream.id] = workstream
+  return workstream
+}
+
+function workstreamTitle(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const clean = value.replace(/\s+/g, ' ').trim()
+  if (clean.length < 2 || clean.length > 80 || /[?？]\s*$/.test(clean)) return undefined
+  return clean
+}
+
 /** This journal owns jobs, budget reservations, decisions and experience atomically. */
 export class Lifecycle {
   readonly journal: JsonJournal<LifecycleState>
@@ -56,7 +82,7 @@ export class Lifecycle {
   private readonly controllers = new Map<string, AbortController>()
   constructor(readonly directory: string, autonomy: Autonomy = 'ask-promote', readonly validationLimits: ValidationLimits = DEFAULT_LIMITS) {
     this.journal = new JsonJournal(join(directory, 'lifecycle.json'), () => ({
-      schema: 2, enabled: true, autonomy, tasks: {}, episodes: {}, experiences: {}, recommendations: {},
+      schema: 2, enabled: true, autonomy, tasks: {}, episodes: {}, experiences: {}, recommendations: {}, workstreams: {},
     }))
   }
   read(): Promise<LifecycleState> { return this.journal.read() }
@@ -104,7 +130,98 @@ export class Lifecycle {
       inputBytes, problemKey: digest(input.prompt + '\n' + inputDigest),
       ...(input.provider ? { provider: input.provider } : {}), ...(input.model ? { model: input.model } : {}),
     }
-    return this.journal.update(state => state.tasks[id] ??= task)
+    return this.journal.update(state => {
+      if (state.tasks[id]) return state.tasks[id]
+      const workstream = ensureWorkstream(state, input.sessionId, input.cwd, input.prompt)
+      const previous = Object.values(state.tasks).filter(value => value.sessionId === input.sessionId && value.cwd === input.cwd)
+        .sort((a, b) => a.startedAt.localeCompare(b.startedAt)).at(-1)
+      if (previous?.completionKind === 'checkpoint') {
+        // A phase boundary does not erase the instructions that established the work.
+        const continuation = isContinuationText(input.prompt)
+        task.prompt = continuation ? workstream.goal : `${workstream.goal}\n\nUser update:\n${input.prompt}`
+        if (continuation && input.requirements === undefined) task.requirements = structuredClone(previous.requirements)
+      }
+      if (workstream.goal !== task.prompt) {
+        workstream.goal = task.prompt; workstream.goalHash = digest(task.prompt)
+        workstream.version += 1; workstream.updatedAt = now()
+      }
+      task.problemKey = digest(task.prompt + '\n' + inputDigest)
+      task.workstreamId = workstream.id
+      task.title = workstream.title
+      state.tasks[id] = task
+      return task
+    })
+  }
+
+  /** Update the convergence title (and optionally the stable goal) for a workstream. */
+  async updateWorkstream(workstreamId: string, input: { title?: string; goal?: string }): Promise<Workstream | undefined> {
+    return this.journal.update(state => {
+      const workstream = state.workstreams?.[workstreamId]
+      if (!workstream) return undefined
+      let changed = false
+      const title = workstreamTitle(input.title)
+      if (title !== undefined && title !== workstream.title) { workstream.title = title; changed = true }
+      if (input.goal !== undefined && input.goal !== workstream.goal) {
+        workstream.goal = input.goal
+        workstream.goalHash = digest(input.goal)
+        changed = true
+      }
+      if (changed) { workstream.version += 1; workstream.updatedAt = now() }
+      return workstream
+    })
+  }
+
+  /** Resolve the workstream for a task, creating it for pre-workstream journals. */
+  async workstreamForTask(taskId: string): Promise<Workstream> {
+    return this.journal.update(state => {
+      const task = this.task(state, taskId)
+      if (task.workstreamId !== undefined) {
+        const existing = state.workstreams?.[task.workstreamId]
+        if (existing) return existing
+      }
+      const workstream = ensureWorkstream(state, task.sessionId, task.cwd, task.prompt)
+      task.workstreamId = workstream.id
+      task.title ??= workstream.title
+      return workstream
+    })
+  }
+
+  /** Persist a model- or locally-derived title for the task's workstream. */
+  async setWorkstreamTitle(taskId: string, value: string): Promise<Workstream | undefined> {
+    const title = workstreamTitle(value)
+    if (title === undefined) return undefined
+    return this.journal.update(state => {
+      const task = this.task(state, taskId)
+      const workstream = (task.workstreamId ? state.workstreams?.[task.workstreamId] : undefined)
+        ?? ensureWorkstream(state, task.sessionId, task.cwd, task.prompt)
+      if (!workstream) return undefined
+      task.workstreamId = workstream.id
+      if (task.title !== title) task.title = title
+      if (workstream.title !== title) {
+        workstream.title = title
+        workstream.version += 1
+        workstream.updatedAt = now()
+      }
+      return workstream
+    })
+  }
+
+  /** Update requirements and their goal version together; UI title changes never authorize old evidence. */
+  async updateTaskPrompt(taskId: string, incoming: string): Promise<TaskRun> {
+    return this.journal.update(state => {
+      const task = this.task(state, taskId)
+      if (!['active', 'awaiting-input'].includes(task.status)) throw new Error('task already closed')
+      if (!incoming.trim() || isContinuationText(incoming) || task.prompt === incoming || task.prompt.endsWith(`\n\nUser update:\n${incoming}`)) return task
+      task.prompt += `\n\nUser update:\n${incoming}`
+      task.generation += 1; task.status = 'active'; task.requirements = []
+      const workstream = (task.workstreamId ? state.workstreams?.[task.workstreamId] : undefined)
+        ?? ensureWorkstream(state, task.sessionId, task.cwd, task.prompt)
+      task.workstreamId = workstream.id
+      workstream.goal = task.prompt; workstream.goalHash = digest(task.prompt)
+      workstream.title = deriveWorkstreamTitle(task.prompt, workstream.title)
+      workstream.version += 1; workstream.updatedAt = now(); task.title = workstream.title
+      return task
+    })
   }
 
   async requirements(taskId: string, requirements: Requirement[]): Promise<void> {
@@ -187,9 +304,16 @@ export class Lifecycle {
         const alreadyCharged = Object.values(state.episodes).filter(e => e.taskId === task.id && e.phase === 'during-task').flatMap(e => e.reservations).reduce((sum, r) => sum + r.charged, 0)
         limits.maxProcessingTokens = Math.max(0, limits.maxProcessingTokens - alreadyCharged)
       }
-      if (Object.values(limits).some(value => !Number.isSafeInteger(value) || value <= 0)) throw new Error('invalid experiment budget')
+      // Zero is a valid setting only for the fresh-input fields, where it means "do not run".
+      if (Object.entries(limits).some(([key, value]) => !Number.isSafeInteger(value) || (key === 'heldOutRuns' ? value < 0 : value <= 0))) throw new Error('invalid experiment budget')
+      const workstream = (task.workstreamId ? state.workstreams?.[task.workstreamId] : undefined)
+        ?? ensureWorkstream(state, task.sessionId, task.cwd, task.prompt)
+      task.workstreamId = workstream.id
+      task.title ??= workstream.title
       const job: EvolutionEpisode = {
         id: randomUUID(), taskId, phase, trigger, scope: 'full-task', snapshotId: task.snapshotId ?? '',
+        workstreamId: workstream.id, title: task.title ?? workstream.title, goalHash: workstream.goalHash,
+        ...(task.completionKind === 'checkpoint' ? { checkpoint: true } : {}),
         expectedParent: task.activeRevision, expectedGeneration: task.generation, taskEvidenceHash: taskEvidenceHash(task),
         baselineTree: structuredClone(task.activeTree ?? task.initialTree),
         expectedRecommendation: state.recommendations[task.taskType] ?? null,
@@ -201,6 +325,35 @@ export class Lifecycle {
       state.episodes[job.id] = job
       return job
     })
+  }
+
+  /**
+   * Close a phase at a checkpoint and queue its post-task experiment without
+   * ending the surrounding workstream. The next phase inherits the current
+   * revision when the workstream goal is unchanged.
+   */
+  async checkpointPhase(taskId: string, input: { reason: WorkstreamCheckpoint['reason']; artifactHash: string; budget?: Partial<ExperimentBudget> }): Promise<EvolutionEpisode> {
+    const prior = Object.values((await this.read()).episodes).find(job => job.taskId === taskId && job.phase === 'post-task')
+    if (prior) throw new Error('a post-task experiment already exists for this phase')
+    const job = await this.enqueue(taskId, 'post-task', `checkpoint:${input.reason}`, input.budget ?? {})
+    await this.journal.update(state => {
+      const task = this.task(state, taskId)
+      const workstream = (task.workstreamId ? state.workstreams?.[task.workstreamId] : undefined)
+        ?? ensureWorkstream(state, task.sessionId, task.cwd, task.prompt)
+      const at = now()
+      const live = this.job(state, job.id)
+      live.checkpoint = true
+      live.workstreamId = workstream.id
+      live.title = task.title ?? workstream.title
+      live.goalHash = workstream.goalHash
+      task.completionKind = 'checkpoint'
+      task.status = 'completed'
+      task.completionEvidence = `Phase checkpoint (${input.reason}); artifact sha256:${input.artifactHash}`
+      task.finishedAt = at
+      workstream.lastCheckpointAt = at
+      workstream.checkpoints.push({ id: randomUUID(), taskId, at, artifactHash: input.artifactHash, reason: input.reason, status: 'queued' })
+    })
+    return this.job(await this.read(), job.id)
   }
 
   async cancel(jobId: string): Promise<void> {
@@ -354,7 +507,7 @@ export class Lifecycle {
           let latest = this.job(await this.read(), jobId)
           const stage = depth === 2 ? 'compose' : `compose:${depth - 1}`
           let composed = latest.candidates.find(c => (c.stage ?? c.kind) === stage)
-          const runs = latest.reservations.filter(r => !r.model).length
+          const runs = latest.reservations.filter(r => !r.model && !r.stage.startsWith('heldout:')).length
           if (!composed && latest.responses[stage] !== 'KEEP_BASE' && runs < latest.budget.maxProbeRuns
             && latest.candidates.some(c => c.kind !== 'baseline' && c.rollout)) {
             const raw = await this.call(jobId, stage, this.proposalPrompt(task, latest, 'compose', latest.candidates)
@@ -366,6 +519,7 @@ export class Lifecycle {
           if (composed?.validation === 'valid') await this.roll(jobId, composed.id, task, runner, signal)
         }
         await this.select(jobId, task, model, signal)
+        await this.verifyHeldOut(jobId, task, model, runner, signal)
         await this.reflect(jobId, task, model, signal)
         await this.commit(jobId)
       } catch (error) {
@@ -506,7 +660,7 @@ export class Lifecycle {
     signal.throwIfAborted()
     const job = this.job(await this.read(), jobId); const candidate = job.candidates.find(c => c.id === candidateId)!
     if (candidate.rollout) return
-    if (job.reservations.filter(r => !r.model).length >= job.budget.maxProbeRuns) throw new Paused('budget-exhausted', 'probe run limit')
+    if (job.reservations.filter(r => !r.model && !r.stage.startsWith('heldout:')).length >= job.budget.maxProbeRuns) throw new Paused('budget-exhausted', 'probe run limit')
     const reservation = await this.reserve(jobId, `run:${candidateId}`, job.budget.probeTokens, 0, false)
     let settled = false
     let directory: string | undefined
@@ -652,6 +806,154 @@ export class Lifecycle {
     await this.journal.update(state => { const live = this.job(state, jobId); this.running(state, live); live.comparison = comparison })
   }
 
+  /**
+   * Run every compared candidate on a fresh input with the conversation removed, then let that evidence veto or
+   * favour. The training input cannot do this: the conversation already taught every candidate that input.
+   * Nothing here may block an episode. Whatever cannot be established is recorded as such and the comparison
+   * made on the training input stands.
+   */
+  private async verifyHeldOut(jobId: string, task: TaskRun, model: ExperimentModel, runner: ExperimentRunner, signal: AbortSignal): Promise<void> {
+    const start = this.job(await this.read(), jobId)
+    if ((start.budget.heldOutRuns ?? 0) <= 0 || start.heldOut?.status === 'verified' || start.heldOut?.status === 'skipped' || start.heldOut?.status === 'unavailable') return
+    const settle = async (record: HeldOutRecord) => { await this.journal.update(state => { const live = this.job(state, jobId); this.running(state, live); live.heldOut = record }) }
+    const empty: HeldOutRecord = { status: 'skipped', reason: '', inputPaths: [], derivations: 0, agreed: 0, contested: 0, agreement: 0, disputed: [], deliverables: [],
+      freshPrompt: '', conversationRemoved: false, runs: [], decisions: [], sharedRuns: {} }
+    const skip = async (reason: string, status: 'skipped' | 'unavailable' = 'skipped') => { await settle({ ...empty, status, reason }) }
+    const comparison = start.comparison
+    if (!comparison) return skip('the candidates were not compared')
+    const baseline = start.candidates.find(c => c.kind === 'baseline' && comparableCandidate(c))
+    const contenders = start.candidates.filter(c => c.kind !== 'baseline' && eligibleCandidate(c, task.requirements))
+    if (!baseline) return skip('the baseline did not produce a comparable result')
+    if (contenders.length === 0) return skip('no candidate was eligible on the training input')
+
+    // Identical harnesses are one candidate: they get one set of runs and share the verdict.
+    const sharedRuns: Record<string, string> = {}
+    const unique: Candidate[] = []
+    for (const candidate of contenders) {
+      const twin = unique.find(other => contentHash(other.tree) === contentHash(candidate.tree))
+      if (twin) sharedRuns[candidate.id] = twin.id
+      else unique.push(candidate)
+    }
+    if (unique.every(c => contentHash(c.tree) === contentHash(baseline.tree))) return skip('every candidate is identical to the baseline')
+
+    const snapshot = await readJson<import('./task-snapshot.js').TaskSnapshot>(join(this.directory, 'checkpoints', `${start.snapshotId}.json`), () => { throw new Error('input snapshot missing') })
+    const files: Record<string, string> = {}
+    for (const [path, file] of Object.entries(snapshot.files)) {
+      if (excludedTaskPath(path)) continue
+      const bytes = Buffer.from(file.base64, 'base64')
+      if (bytes.includes(0)) continue
+      files[path] = bytes.toString('utf8')
+    }
+    const replaceable = Object.fromEntries(Object.entries(files).filter(([path]) => isReplaceableInput(path)))
+    if (Object.keys(replaceable).length === 0) return skip('the task has no data file that can be replaced with a fresh one')
+    const inputs = new Set(Object.keys(files))
+    const deliverables = deliverablePaths([baseline, ...contenders].map(c => Object.keys(c.rollout?.artifacts ?? {})), inputs)
+    if (deliverables.length === 0) return skip('no deliverable file was produced, so there is nothing to check')
+    const reference = Object.fromEntries(Object.entries(files).filter(([path]) => !(path in replaceable)))
+    const referenceChars = Object.values(reference).reduce((n, t) => n + t.length, 0)
+    if (referenceChars + Object.values(replaceable).reduce((n, t) => n + t.length, 0) > HELD_OUT_LIMITS.promptChars * 8) return skip('the inputs are too large to regenerate within the prompt limit')
+    const requirementText = task.requirements.map(r => r.description)
+    const fresh = freshPrompt(task.prompt, isContinuationText)
+
+    // 1. A fresh input, written by a model from the confirmed rules, accepted only if it keeps the task's shape.
+    let replacement: Record<string, string> | undefined
+    let problem = ''
+    for (const attempt of [1, 2]) {
+      const stage = attempt === 1 ? 'heldout:input' : 'heldout:input:2'
+      const prompt = inputPrompt({ task: task.prompt, requirements: requirementText, replaceable, reference, deliverables, ...(problem ? { problem } : {}) })
+      const reply = parseFiles(object(await this.call(jobId, stage, prompt, 1400, model, signal)))
+      const verdict = validateHeldOutInput(files, reply, deliverables)
+      if (verdict.ok) { replacement = reply; break }
+      problem = verdict.reason
+    }
+    if (!replacement) return skip(`a usable fresh input could not be generated: ${problem}`, 'unavailable')
+    const heldFiles = { ...files, ...replacement }
+
+    // 2. Expected results derived independently and kept only where every derivation agrees.
+    const wanted = Math.max(2, Math.floor(start.budget.heldOutDerivations ?? 2))
+    const derivations: Expectation[][] = []
+    for (let attempt = 1; attempt <= wanted; attempt += 1) {
+      const stage = `heldout:derive:${attempt}`
+      const reply = parseFiles(object(await this.call(jobId, stage, derivePrompt({ task: task.prompt, requirements: requirementText, files: heldFiles, deliverables, attempt, of: wanted }), 4000, model, signal)))
+      const cells: Expectation[] = []
+      for (const path of deliverables) if (reply[path] !== undefined) cells.push(...cellsOf(path, reply[path] as string).slice(0, HELD_OUT_LIMITS.cells))
+      derivations.push(cells)
+    }
+    const set = mergeDerivations(derivations)
+    const base: HeldOutRecord = { ...empty, status: 'running', reason: 'running fresh-input executions', inputPaths: Object.keys(replacement), derivations: derivations.length,
+      agreed: set.agreed.length, contested: set.contested.length, agreement: set.agreement, deliverables, freshPrompt: fresh.prompt, conversationRemoved: fresh.conversationRemoved, sharedRuns }
+    if (set.agreed.length === 0) { await settle({ ...base, status: 'unavailable', reason: 'the independent derivations agreed on nothing, so no result could be trusted' }); return }
+    // On resume the runs already recorded must survive: they are paid for, and repeating them would change the verdicts.
+    const existing = this.job(await this.read(), jobId).heldOut?.runs ?? []
+    await settle({ ...base, runs: existing })
+
+    // 3. Each distinct candidate and the baseline, several times, on the fresh input and the new-session request.
+    const repeats = Math.max(1, Math.floor(start.budget.heldOutRuns ?? 1))
+    const targets: Candidate[] = [baseline, ...unique]
+    const runnerTask: TaskRun = { ...task, prompt: fresh.prompt, requirements: [] }
+    for (const candidate of targets) {
+      for (let n = 1; n <= repeats; n += 1) {
+        const already = this.job(await this.read(), jobId).heldOut?.runs.some(r => r.candidateId === candidate.id && r.n === n)
+        if (already) continue
+        // The loop is bounded by targets x repeats, and reserve() enforces the processing-token ceiling for every run.
+        // Counting reservations here would charge a run twice after a crash left its reservation unsettled.
+        const result = await this.rollFresh(jobId, candidate, runnerTask, heldFiles, runner, signal)
+        const outcome = evaluateExpectations(result.artifacts, set.agreed)
+        const record: HeldOutRun = { candidateId: candidate.id, n, status: result.status, passed: outcome.passed, total: set.agreed.length, failed: outcome.failed,
+          steps: result.steps, processingTokens: result.usage ? processingTokens(result.usage) : 0, conclusive: isConclusive(result.status, result.limit),
+          ...(result.limit ? { limit: result.limit } : {}) }
+        await this.journal.update(state => { const live = this.job(state, jobId); this.running(state, live); live.heldOut!.runs.push(record) })
+      }
+    }
+
+    // 4. Verdicts. An expectation every conclusive run missed points at the expectation, not at any harness.
+    const done = this.job(await this.read(), jobId).heldOut!
+    const disputed = universallyMissed(done.runs.filter(r => r.conclusive !== false), set.agreed)
+    const ignore = new Set(disputed)
+    const verdicts = targets.map(c => verdictOf(c.id, done.runs, ignore))
+    const retained = set.agreed.filter(item => !ignore.has(item.id))
+    const effectiveSet = { ...set, agreed: retained, agreement: retained.length / Math.max(1, set.agreed.length + set.contested.length) }
+    const decisions = standings(baseline.id, verdicts, effectiveSet)
+    // Candidates with an identical harness inherit the standing of the one that ran.
+    const inherited = contenders.filter(c => sharedRuns[c.id]).map(c => ({ ...(decisions.find(d => d.candidateId === sharedRuns[c.id]) ?? { standing: 'unverified' as const, reason: 'no standing' }), candidateId: c.id }))
+    const final = finalChoice({ selectorWinner: comparison.winner, baselineId: baseline.id,
+      decisions: [...decisions, ...inherited], verdicts, eligible: new Set(unique.map(c => c.id)) })
+    await this.journal.update(state => {
+      const live = this.job(state, jobId); this.running(state, live)
+      live.heldOut = { ...done, status: 'verified', reason: final.note, disputed, decisions: [...decisions, ...inherited] }
+      const winner = final.winner !== null && sharedRuns[final.winner] ? sharedRuns[final.winner]! : final.winner
+      live.comparison = { ...live.comparison!, winner: winner === baseline.id ? live.comparison!.winner : winner,
+        complete: winner !== null && winner !== baseline.id ? true : live.comparison!.complete,
+        rationale: `${live.comparison!.rationale} | fresh input: ${final.note}`, ...(final.effect ? { heldOutEffect: final.effect } : {}) }
+    })
+  }
+
+  /** One candidate on a fresh directory holding the replaced input. Charged like any other probe run. */
+  private async rollFresh(jobId: string, candidate: Candidate, task: TaskRun, files: Readonly<Record<string, string>>, runner: ExperimentRunner, signal: AbortSignal): Promise<Rollout> {
+    signal.throwIfAborted()
+    const job = this.job(await this.read(), jobId)
+    const reservation = await this.reserve(jobId, `heldout:${candidate.id}`, job.budget.probeTokens, 0, false)
+    let settled = false
+    let directory: string | undefined
+    try {
+      const runs = join(this.directory, 'episodes', jobId, 'runs'); await mkdir(runs, { recursive: true })
+      directory = await mkdtemp(join(runs, 'heldout-'))
+      for (const [path, text] of Object.entries(files)) {
+        const target = await safeTaskPath(directory, path)
+        await mkdir(dirname(target), { recursive: true }); await writeFile(target, text, { flag: 'wx', mode: 0o600 })
+      }
+      const result = await runner.run({ task: { ...task, cwd: directory }, candidate, snapshotId: job.snapshotId, directory,
+        maxTokens: job.budget.probeTokens, maxOutputTokens: job.budget.probeMaxOutputTokens ?? 32768, maxSteps: job.budget.probeSteps, timeoutMs: job.budget.probeTimeoutMs, signal })
+      await this.settle(jobId, reservation, result.usage); settled = true; signal.throwIfAborted()
+      if (runner.capabilities.loaderVersion && result.loaderVersion !== runner.capabilities.loaderVersion) throw new Paused('pending-validation', 'execution did not attest the advertised harness loading version')
+      await this.journal.update(state => { delete this.job(state, jobId).inFlight })
+      return result
+    } finally {
+      try { if (!settled) await this.settle(jobId, reservation) }
+      finally { if (directory) await rm(directory, { recursive: true, force: true }) }
+    }
+  }
+
   private async reflect(jobId: string, task: TaskRun, model: ExperimentModel, signal: AbortSignal): Promise<void> {
     const job = this.job(await this.read(), jobId)
     if (!job.candidates.some(c => c.kind !== 'baseline' && c.rollout)) return
@@ -727,7 +1029,8 @@ export class Lifecycle {
 /** Bounded public projection: execution artifacts remain in the local journal. */
 export function episodeSummary(job: EvolutionEpisode, requirements?: readonly Requirement[]) {
   return {
-    id: job.id, taskId: job.taskId, phase: job.phase, status: job.status,
+    id: job.id, taskId: job.taskId, workstreamId: job.workstreamId, title: job.title,
+    checkpoint: job.checkpoint === true, goalHash: job.goalHash, phase: job.phase, status: job.status,
     reason: job.reason.slice(0, 500), createdAt: job.createdAt, endedAt: job.endedAt,
     processingTokens: job.reservations.reduce((sum, r) => sum + r.charged, 0),
     unknownUsage: job.reservations.filter(r => r.status === 'unknown').length,
@@ -735,19 +1038,35 @@ export function episodeSummary(job: EvolutionEpisode, requirements?: readonly Re
     candidates: job.candidates.slice(0, 10).map(c => ({ id: c.id, kind: c.kind, stage: c.stage ?? c.kind, validation: c.validation, eligibility: !c.rollout ? 'not-executed' : !requirements ? 'unknown' : eligibleCandidate(c, requirements) ? 'eligible' : 'ineligible', selected: job.comparison?.complete === true && job.comparison.winner === c.id, reason: c.reason?.slice(0, 500), repairs: c.repairs?.slice(0, 1).map(r => ({ ...r, reason: r.reason.slice(0, 500), outcome: r.outcome.slice(0, 100) })),
       ...(c.rollout ? { rollout: { status: c.rollout.status, limit: c.rollout.limit, checks: c.rollout.checks.map(check => ({ id: check.id, status: check.status, evidence: check.evidence.slice(0, 300) })), steps: c.rollout.steps, toolErrors: c.rollout.toolErrors, reason: c.rollout.reason?.slice(0, 500), artifactCount: Object.keys(c.rollout.artifacts).length } } : {}) })),
     comparison: job.comparison ? { winner: job.comparison.winner, complete: job.comparison.complete,
-      rationale: job.comparison.rationale.slice(0, 500), evidence: job.comparison.evidence.slice(0, 5).map(e => e.slice(0, 300)) } : undefined,
+      rationale: job.comparison.rationale.slice(0, 500), evidence: job.comparison.evidence.slice(0, 5).map(e => e.slice(0, 300)),
+      ...(job.comparison.heldOutEffect ? { heldOutEffect: job.comparison.heldOutEffect } : {}) } : undefined,
+    heldOut: job.heldOut ? heldOutSummary(job.heldOut) : undefined,
+  }
+}
+/** Bounded view of fresh-input verification: what was decidable, what each candidate did, and why. */
+export function heldOutSummary(record: HeldOutRecord) {
+  return {
+    status: record.status, reason: record.reason.slice(0, 500), conversationRemoved: record.conversationRemoved,
+    decidable: { agreed: record.agreed, contested: record.contested, agreement: Math.round(record.agreement * 100) },
+    disputed: record.disputed.length, runs: record.runs.length,
+    candidates: record.decisions.slice(0, 10).map(decision => {
+      const own = record.runs.filter(run => run.candidateId === decision.candidateId && run.conclusive !== false)
+      return { id: decision.candidateId, standing: decision.standing, clean: own.filter(run => run.failed.length === 0 && run.status === 'completed').length, runs: own.length,
+        meanSteps: own.length ? Math.round(own.reduce((n, run) => n + run.steps, 0) / own.length) : 0, reason: decision.reason.slice(0, 300) }
+    }),
   }
 }
 export function lifecycleSummary(state: LifecycleState) {
   const tasks = Object.values(state.tasks); const episodes = Object.values(state.episodes); const experiences = Object.values(state.experiences)
   return {
     tasks: tasks.slice(-20).reverse().map(t => ({ id: t.id, status: t.status, taskType: t.taskType,
+      workstreamId: t.workstreamId, title: t.title, completionKind: t.completionKind,
       prompt: t.prompt.slice(0, 500), completionEvidence: t.completionEvidence.slice(0, 500), activeRevision: t.activeRevision })),
     experiments: episodes.slice(-20).reverse().map(job => {
       const task = state.tasks[job.taskId]
       // Changed requirements cannot retroactively re-grade a recorded execution.
       const requirements = task && job.taskEvidenceHash === taskEvidenceHash(task) ? task.requirements : undefined
-      return { ...episodeSummary(job, requirements), taskTitle: taskTitle(task?.prompt ?? '') }
+      return { ...episodeSummary(job, requirements), taskTitle: job.title ?? task?.title ?? taskTitle(task?.prompt ?? '') }
     }),
     experiences: experiences.slice(-20).reverse().map(e => ({ id: e.id, taskType: e.taskType, state: e.state,
       lesson: e.lesson.slice(0, 1000), applicability: e.applicability.slice(0, 500),

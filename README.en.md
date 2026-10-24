@@ -6,18 +6,16 @@
 
 Evo observes grounded requirements and delivery evidence, proposes candidate harnesses, executes them against frozen inputs, composes a new harness from their evidence, and independently reruns it before selection. Keeping the baseline is a valid outcome.
 
-**Developer preview: `0.2.2-dev.4.public.1`.** Quality gains are not guaranteed; parity with Harness² has not been demonstrated. Start with a recoverable local workspace and a separate DSH Profile.
-
 ## Use the plugin
 
 You do not need to build this repository to try Evo.
 
 1. Prepare DSH **`0.2.1-rc.2`** with a working model route. See the [DSH project](https://github.com/deepseek-ai/deepseek-harness).
-2. Download `dsh-evolve-bundle-0.2.2-dev.4.public.1.tgz` from [Releases](https://github.com/mmj953131361-eng/dsh-evolve/releases).
+2. Download `dsh-evolve-bundle-0.2.2-dev.5.tgz` from [Releases](https://github.com/mmj953131361-eng/dsh-evolve/releases).
 3. Install it into the Profile you actually use (for example, `desktop`):
 
    ```sh
-   dsh plugin --profile desktop add /absolute/download/path/dsh-evolve-bundle-0.2.2-dev.4.public.1.tgz
+   dsh plugin --profile desktop add /absolute/download/path/dsh-evolve-bundle-0.2.2-dev.5.tgz
    ```
 
 4. Restart that Profile, open a local project and a fresh conversation, then work normally. The Evo entry shows learning status, changes and undo. A queued job has not executed yet; KEEP_BASE means no challenger was adopted.
@@ -39,15 +37,6 @@ Evo observes task requirements and delivery evidence, proposes candidates, execu
 Dismissing a review never approves it. User-owned content and concurrent edits are preserved. Supported components currently cover instructions, task context, memory text and native skills. Arbitrary tools, plugins, MCP, permissions and Loop code are not automatically evolved.
 
 Pause using the panel's advanced menu or `/evolve off`; `/evolve on` resumes learning without reviving cancelled experiments. Undo is available for specific adopted changes. Uninstall with `dsh plugin --profile desktop remove @dsh-evolve/bundle` and restart. Review/undo adopted project or Profile changes separately before uninstalling.
-
-### Limits, model use and cost
-
-- Candidate execution currently uses restricted local file tools, without shell, network operations or generated-code execution. It is not a replay of every foreground capability.
-- Idle, file existence and a model saying “done” do not independently establish completion.
-- Long-running project and changing-goal lifecycle support is deferred.
-- Learning makes additional model calls. Default post-task ceilings are **512M processing tokens / 8 hours**, with a requested per-call output ceiling of 1M; actual model/API limits apply. These are ceilings, not measured consumption. Review the [budget configuration](docs/quickstart.md) before enabling unattended learning.
-- Requirements and relevant frozen sources/artifacts are sent to your configured model provider. Runtime state lives in `.dsh-evolve/` and must stay out of Git.
-- The public repository includes runtime source, installable packages and user/build documentation. Unit tests, fixtures, task cases and evaluation materials remain private. No public evidence establishes consistent quality improvements.
 
 ## Documentation
 

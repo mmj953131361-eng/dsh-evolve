@@ -35,4 +35,4 @@ jobs:
       - run: pnpm build
       - run: mkdir -p dist
       - run: pnpm --filter @dsh-evolve/bundle pack --pack-destination "$PWD/dist"
-      - run: python3 ../scripts/check-publication.py dist/dsh-evolve-bundle-0.2.2-dev.4.public.1.tgz
+      - run: python3 ../scripts/check-publication.py dist/dsh-evolve-bundle-*.tgz

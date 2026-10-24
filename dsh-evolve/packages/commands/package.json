@@ -1,6 +1,6 @@
 {
   "name": "@dsh-evolve/commands",
-  "version": "0.2.2-dev.4.public.1",
+  "version": "0.2.2-dev.5",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

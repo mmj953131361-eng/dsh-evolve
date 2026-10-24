@@ -59,7 +59,7 @@ export function apply(ctx: Context): void {
   ctx.commands.register({
     name: 'evolve',
     description: 'Inspect, propose, roll back, or disable self-evolution for this agent.',
-    input: { hint: 'status|history|diff|rollback|on|off|reflect|propose|probe|library|adoptions|review|accept|dismiss|undo|pending|approve|reject|promote|loop' },
+    input: { hint: 'status|history|diff|rollback|on|off|reflect|propose|checkpoint|probe|library|adoptions|review|accept|dismiss|undo|pending|approve|reject|promote|loop' },
     handler: async ({ agent, rawInput }) => {
       const [subcommand = 'status', argument, hash, ...extra] = rawInput.trim().split(/\s+/)
       try {
@@ -163,6 +163,12 @@ export function apply(ctx: Context): void {
             return result.ok
               ? { kind: 'success', text: `evolve: ${result.reason} ${result.episodeId ?? ''} — ${result.rationale ?? ''}` }
               : { kind: 'error', text: `evolve: not applied (${result.reason}) ${result.rationale ?? ''}` }
+          }
+          case 'checkpoint': {
+            const result = await ctx.evolveAgent.checkpoint(agent)
+            return result.ok
+              ? { kind: 'success', text: `evolve: checkpoint queued ${result.episodeId ?? ''}` }
+              : { kind: 'error', text: `evolve: checkpoint not queued (${result.reason})` }
           }
           case 'loop': {
             const mode = argument ?? 'stock'

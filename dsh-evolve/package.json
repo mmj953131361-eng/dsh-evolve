@@ -1,6 +1,6 @@
 {
   "name": "@dsh-evolve/root",
-  "version": "0.2.2-dev.4.public.1",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.28.5",

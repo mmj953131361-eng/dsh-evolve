@@ -6,6 +6,8 @@ export interface ViewText { zh: string; en: string }
 export interface EvolutionView {
   state: 'idle' | 'running' | 'queued' | 'learning' | 'kept-base' | 'selected' | 'pending-adoption' | 'failed' | 'paused'
   title: ViewText
+  /** Persistent convergence of the session/workspace work, not the first prompt. */
+  workstreamTitle?: string
   taskTitle: string
   strategy: 'baseline' | 'revision'
   strategyVersion: number | null
@@ -28,11 +30,37 @@ const message = (zh: string, en: string): ViewText => ({ zh, en })
 const newest = <T>(items: readonly T[], at: (item: T) => string | undefined): T | undefined =>
   [...items].sort((a, b) => (at(b) ?? '').localeCompare(at(a) ?? ''))[0]
 
+export function truncateUnicode(text: string, max = 40): string {
+  const chars = [...text]
+  return chars.length <= max ? text : chars.slice(0, Math.max(0, max - 1)).join('') + '…'
+}
+
+export function compactText(text: string, max = 80): string {
+  return truncateUnicode(text.replace(/\s+/g, ' ').trim(), max)
+}
+
 export function taskTitle(prompt: string): string {
   const firstRequest = prompt.split(/\n\s*User update:\s*\n/)[0] ?? ''
-  const clean = firstRequest.replace(/\s+/g, ' ').trim()
-  const chars = [...clean]
-  return chars.length <= 40 ? clean : chars.slice(0, 39).join('') + '…'
+  return compactText(firstRequest.replace(/\s+/g, ' ').trim(), 40)
+}
+
+const CONTINUATION = /^(?:(?:继续|下一步|接着)(?:处理)?(?:下一|后续|当前)?(?:阶段|步|任务)?|然后|好的?|可以|完成|开始|next|continue(?: (?:to )?the next phase)?|go on|done|ok(?:ay)?)[。.!！?？\s]*$/i
+
+/**
+ * Derive a stable, user-facing workstream title from the latest meaningful
+ * request. Pure continuations keep the previous request; code fences and
+ * paths are removed so the title does not become an instruction dump.
+ */
+export function isContinuationText(text: string): boolean {
+  return CONTINUATION.test(text.trim())
+}
+
+export function deriveWorkstreamTitle(prompt: string, fallback = 'Current work'): string {
+  const segments = prompt.split(/\n\s*User update:\s*\n/).map(value => value.trim()).filter(Boolean)
+  const meaningful = [...segments].reverse().find(value => !CONTINUATION.test(value.replace(/[。.!！?？\s]+$/g, ''))) ?? segments.at(-1) ?? prompt
+  const firstLine = meaningful.split(/\r?\n/).find(line => line.trim().length > 0) ?? meaningful
+  const clean = firstLine.replace(/```[\s\S]*?```/g, ' ').replace(/`[^`]*`/g, ' ').replace(/\s+/g, ' ').trim()
+  return compactText(clean || fallback, 40)
 }
 
 /** Only translate known causes; an advertised output ceiling is not proof it was reached. */
@@ -65,9 +93,11 @@ export function buildEvolutionView(snapshot: Omit<AgentSnapshot, 'view'>,
   const recentPlan = newest(plans.filter(plan => ['applied', 'undone'].includes(plan.status)), item => item.updatedAt)
   const times = [task?.startedAt, task?.finishedAt, job?.endedAt, job?.createdAt, recentPlan?.updatedAt, pending[0]?.updatedAt]
     .filter((value): value is string => !!value).sort()
+  const currentTitle = task?.title ?? taskTitle(task?.prompt || snapshot.task)
   const view: EvolutionView = {
     state: 'idle', title: message('准备好学习', 'Ready to learn'),
-    taskTitle: taskTitle(task?.prompt || snapshot.task), strategy: context.baseline ? 'baseline' : 'revision', strategyVersion,
+    workstreamTitle: snapshot.workstreamTitle ?? currentTitle,
+    taskTitle: currentTitle, strategy: context.baseline ? 'baseline' : 'revision', strategyVersion,
     summary: message('正常布置任务即可。任务完成后会自动学习，只有需要确认改动时才通知你。', 'Give your task as usual. Evo learns after completion and asks when a change needs approval.'),
     reason: null, detail: null, primaryAction: null, pendingCount: pending.length,
     learningCount: context.completedLearningCount ?? snapshot.experiments.filter(item => ['selected', 'kept-base'].includes(item.status)).length,
@@ -125,7 +155,11 @@ export function buildEvolutionView(snapshot: Omit<AgentSnapshot, 'view'>,
   }
   if (job?.status === 'kept-base') return { ...view, state: 'kept-base',
     title: context.baseline ? message('已保留基线', 'Baseline retained') : message('已保留当前策略', 'Current strategy retained'),
-    summary: message('本次没有发现可靠优于原策略的候选，已保留原策略。', 'No candidate was reliably better in this comparison. The original strategy was retained.'),
+    summary: job.comparison?.heldOutEffect === 'vetoed'
+      ? message('候选在训练输入上被选中，但在没有对话历史的新输入上表现不如原策略，已保留原策略。', 'A candidate was chosen on the training input, but on a fresh input without the conversation it did worse than the original, so the original was retained.')
+      : job.heldOut?.status === 'verified'
+        ? message('候选在新输入上没有表现出可靠的优势，已保留原策略。', 'No candidate showed a reliable advantage on a fresh input. The original strategy was retained.')
+        : message('本次没有发现可靠优于原策略的候选，已保留原策略。', 'No candidate was reliably better in this comparison. The original strategy was retained.'),
     primaryAction: { kind: 'view-comparison', id: job.id } }
   if (job?.status === 'selected') {
     if (currentPlan && currentPlan.sourceEpisodeIds?.includes(job.id)) return { ...view, state: 'selected',

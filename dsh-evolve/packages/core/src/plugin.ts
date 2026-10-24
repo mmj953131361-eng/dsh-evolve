@@ -27,7 +27,7 @@ import { buildEvolutionView } from './view.js'
 import { Lifecycle, lifecycleSummary } from './lifecycle.js'
 import { eligibleCandidate } from './selection.js'
 import { withLock, JsonJournal, readJson } from './persistence.js'
-import { adoptionId, adoptionSummary, taskStamp, type AdoptionPlan, type AdoptionState } from './adoption.js'
+import { adoptionChangeKinds, adoptionHeadline as compactAdoptionHeadline, adoptionId, adoptionSummary, taskStamp, type AdoptionPlan, type AdoptionState } from './adoption.js'
 import type { LifecycleState } from './lifecycle-types.js'
 import { installPromptComponents, installSkillComponents, unsupportedNativePaths, NATIVE_DISCLOSURE_VERSION } from './native-components.js'
 import { contentHash } from './tree.js'
@@ -176,9 +176,13 @@ export class Evolve {
         episodes: Object.fromEntries(Object.entries(lifecycle.episodes).filter(([, job]) => sessionTasks[job.taskId])) })
       const candidates = sandbox === undefined ? [] : await sandbox.list(agent)
       const state = agentState?.state(agent)
+      const task = Object.values(sessionTasks).sort((a, b) => a.startedAt.localeCompare(b.startedAt)).at(-1)
+      const workstream = task?.workstreamId ? lifecycle.workstreams?.[task.workstreamId] : undefined
+      const workstreamTitle = workstream?.title ?? task?.title
       const snapshot: Omit<AgentSnapshot, 'view'> = {
         id: String(agent.id), sessionId: String(agent.session.id),
         workspace: binding.dir,
+        ...(workstreamTitle ? { workstreamTitle } : {}),
         ...projection,
         adoptions: (await this.adoptions(agent)).map(adoptionSummary),
         enabled: binding.enabled,
@@ -216,7 +220,6 @@ export class Evolve {
           findings: candidate.report.findings.map(finding => `${finding.rule}: ${finding.detail}`),
         })),
       }
-      const task = Object.values(sessionTasks).sort((a, b) => a.startedAt.localeCompare(b.startedAt)).at(-1)
       return { ...snapshot, view: buildEvolutionView(snapshot, { baseline: Object.keys(binding.tree).length === 0,
         ...(task ? { task } : {}), agentStatus: agent.status, completedLearningCount: Object.values(lifecycle.episodes)
           .filter(job => sessionTasks[job.taskId] && ['selected', 'kept-base'].includes(job.status)).length }) }
@@ -229,16 +232,30 @@ export class Evolve {
     const state = await binding.lifecycle.read()
     const taskIds = new Set(Object.values(state.tasks).filter(task => task.sessionId === String(agent.session.id)).map(task => task.id))
     const experimentCalls = Object.values(state.episodes).filter(job => taskIds.has(job.taskId)).flatMap(job => job.reservations)
-    const observations = await readJson<{ schema: number; tasks: Record<string, { calls: { charged: number; usage?: import('./lifecycle-types.js').Usage }[] }> }>(
+    const observations = await readJson<{ schema: number; tasks: Record<string, { calls: { stage?: string; status?: string; charged: number; usage?: import('./lifecycle-types.js').Usage }[] }> }>(
       join(binding.dir, 'automation', `${agent.session.id}.json`), () => ({ schema: 1, tasks: {} }))
     if (observations.schema !== 1) throw new Error('unsupported automatic observation ledger schema')
     const reservations = [...experimentCalls, ...Object.values(observations.tasks).flatMap(task => task.calls)]
     const history = await binding.store.list()
+    const stages = new Map<string, { charged: number; unknown: number }>()
+    for (const reservation of reservations) {
+      const stage = reservation.stage ?? 'observation'
+      const entry = stages.get(stage) ?? { charged: 0, unknown: 0 }
+      entry.charged += reservation.charged
+      if (reservation.status === 'unknown') entry.unknown += reservation.charged
+      stages.set(stage, entry)
+    }
+    const charged = (status: string) => reservations.filter(r => r.status === status).reduce((sum, r) => sum + r.charged, 0)
+    const settledTokens = charged('settled')
+    const unknownTokens = charged('unknown')
     return {
       evolutions: history.filter(r => ['incremental', 'probe-composed', 'task-shaping'].includes(r.origin.kind)).length,
       inputTokens: reservations.reduce((sum, r) => sum + (r.usage?.inputTokens ?? 0) + (r.usage?.cacheReadTokens ?? 0) + (r.usage?.cacheWriteTokens ?? 0), 0),
       outputTokens: reservations.reduce((sum, r) => sum + (r.usage?.outputTokens ?? 0), 0),
       extraTokens: reservations.reduce((sum, r) => sum + r.charged, 0),
+      settledTokens,
+      unknownTokens,
+      stageTokens: [...stages.entries()].map(([stage, value]) => ({ stage, ...value })).sort((a, b) => b.charged - a.charged).slice(0, 20),
     }
   }
 
@@ -337,9 +354,12 @@ export class Evolve {
         const failure = await this.checkAdoption(agent, binding, revision, state)
         if (failure) return failure
         const now = new Date().toISOString()
+        const changedPaths = [...new Set([...Object.keys(binding.tree), ...Object.keys(revision.tree)])]
+          .filter(path => binding.tree[path] !== revision.tree[path])
         const draft = {
           scope: 'session' as const, adoptionMode: this.config.sessionAdoption === 'review' ? 'review' as const : 'auto' as const,
           targetId: `session:${agent.session.id}`, targetLabel: '当前会话', expectedEffect: this.adoptionReason(revision, state),
+          headline: this.adoptionHeadline(revision, state), changeKinds: adoptionChangeKinds(changedPaths), fileCount: changedPaths.length,
           affectedSessions: [String(agent.session.id)], affectedProjects: [], impactNote: '仅影响当前会话，可撤销。',
           targetSessionId: String(agent.session.id), contentHash: revision.contentHash,
           parent: revision.parent, revision, beforeTree: binding.tree, taskStamp: taskStamp(state, String(agent.session.id)),
@@ -535,11 +555,13 @@ export class Evolve {
         const support = facts.filter(item => item.contentHash === hash && (target.scope === 'profile' || item.project === project))
         const revision = createRevision({ parent: null, tree: fact.tree, origin: { kind: 'reflection' }, createdAt: new Date().toISOString(), level: 'L1', cacheImpact: 'low' })
         const now = new Date().toISOString()
+        const changedFiles = scopedPlan.files.filter(file => file.before !== file.after)
         const draft = {
           scope: target.scope, adoptionMode: 'review' as const, targetId: `${target.scope}:${target.root}`,
           targetLabel: target.scope === 'project' ? '本项目的新会话' : `Profile ${target.name} 的 Agent`,
           targetDirectory: target.root, ...(target.scope === 'profile' ? { profileName: target.name } : {}),
           targetSessionId: String(agent.session.id), contentHash: hash, parent: null,
+          headline: compactAdoptionHeadline(fact.expectedEffect, '共享范围改进'), changeKinds: adoptionChangeKinds(changedFiles.map(file => file.path)), fileCount: changedFiles.length,
           revision, beforeTree: {}, taskStamp: '', reason: fact.reason, expectedEffect: fact.expectedEffect,
           verification: support.map(item => `${item.project} · ${item.session} · ${item.episode}: ${item.reason}`),
           support: support.map(({ project, problem, session, episode }) => ({ project, problem, session, episode })),
@@ -550,7 +572,7 @@ export class Evolve {
           activationDetail: scopedPlan.activationDetail,
           rollback: '撤销仅恢复 Evo 本次修改；若文件已被编辑，保留现状并提示冲突。已有对话历史不会被删除。',
           scopedPlan,
-          files: scopedPlan.files.filter(file => file.before !== file.after).map(file => ({ path: file.path, status: file.before === null ? 'added' as const : file.after === null ? 'removed' as const : 'changed' as const, before: file.before ?? '', after: file.after ?? '' })),
+          files: changedFiles.map(file => ({ path: file.path, status: file.before === null ? 'added' as const : file.after === null ? 'removed' as const : 'changed' as const, before: file.before ?? '', after: file.after ?? '' })),
           createdAt: now, updatedAt: now,
         }
         const plan: AdoptionPlan = { ...draft, id: adoptionId(draft), status: 'pending' }
@@ -681,6 +703,14 @@ export class Evolve {
     if (plan.status !== 'applied') await this.setAdoptionStatus(binding, plan.id, 'applied')
   }
 
+  private adoptionHeadline(revision: Revision, state: LifecycleState): string {
+    const reference = revision.evidence.find(ref => ref.kind === 'experiment')
+    const candidate = reference?.kind === 'experiment'
+      ? state.episodes[reference.episodeId]?.candidates.find(item => item.id === reference.candidateId)
+      : undefined
+    return compactAdoptionHeadline(candidate?.hypothesis ?? candidate?.expectedChanges[0], '本次会话改进')
+  }
+
   private adoptionReason(revision: Revision, state: LifecycleState): string {
     const reasons = revision.evidence.map(ref => ref.kind === 'experiment'
       ? state.episodes[ref.episodeId]?.comparison?.rationale
@@ -730,11 +760,19 @@ export class Evolve {
         const candidate = job?.candidates.find(c => c.id === ref.candidateId)
         const sessionTasks = Object.values(state.tasks).filter(item => item.sessionId === String(agent.session.id))
         const latestTask = sessionTasks.sort((a, b) => a.startedAt.localeCompare(b.startedAt)).at(-1)
-        const phaseMatches = job?.phase === 'during-task' ? task && ['active', 'awaiting-input'].includes(task.status)
-          : job?.phase === 'post-task' && task && ['completed', 'failed', 'timeout'].includes(task.status) && latestTask?.id === task.id
+        const workstream = job?.workstreamId ? state.workstreams?.[job.workstreamId] : undefined
+        const continuation = job?.checkpoint === true && task !== undefined && latestTask !== undefined && job.workstreamId !== undefined
+          && latestTask.workstreamId === job.workstreamId && latestTask.startedAt > task.startedAt
+          && ['active', 'awaiting-input'].includes(latestTask.status) && workstream?.goalHash === job.goalHash
+          && latestTask.activeRevision === job.expectedParent
+        const phaseMatches = continuation
+          || (job?.phase === 'during-task' ? task && ['active', 'awaiting-input'].includes(task.status)
+            : job?.phase === 'post-task' && task && ['completed', 'failed', 'timeout'].includes(task.status) && latestTask?.id === task.id)
+        const generationMatches = continuation || task?.generation === job?.expectedGeneration
+        const parentMatches = continuation ? latestTask?.activeRevision === job?.expectedParent : task?.activeRevision === job?.expectedParent
         if (!job || !task || job.status !== 'selected' || !phaseMatches
           || task.sessionId !== String(agent.session.id)
-          || task.generation !== job.expectedGeneration || task.activeRevision !== job.expectedParent
+          || !generationMatches || !parentMatches
           || revision.parent !== job.expectedParent || ref.snapshotId !== job.snapshotId
           || job.runnerCapabilities?.loaderVersion !== NATIVE_DISCLOSURE_VERSION || job.comparison?.loaderVersion !== NATIVE_DISCLOSURE_VERSION
           || candidate?.rollout?.loaderVersion !== NATIVE_DISCLOSURE_VERSION

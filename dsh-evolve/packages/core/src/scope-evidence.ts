@@ -28,7 +28,7 @@ export function scopeSupport(state: LifecycleState, project: string): ScopeSuppo
   return Object.values(state.episodes).flatMap(job => {
     const task = state.tasks[job.taskId]
     const candidate = job.candidates.find(item => item.id === job.comparison?.winner)
-    if (!task || !candidate || job.status !== 'selected' || !job.comparison?.complete
+    if (!task || !candidate || job.status !== 'selected' || !job.comparison?.complete || job.checkpoint === true
       || job.phase !== 'post-task' || job.scope !== 'full-task' || !['completed', 'failed', 'timeout'].includes(task.status)
       || !task.snapshotId || job.snapshotId !== task.snapshotId || job.taskEvidenceHash !== taskEvidenceHash(task)
       || job.runnerCapabilities?.loaderVersion !== NATIVE_DISCLOSURE_VERSION

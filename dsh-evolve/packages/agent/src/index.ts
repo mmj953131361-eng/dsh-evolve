@@ -9,11 +9,12 @@ import type { ApplyOutcome } from '@dsh-evolve/core/applier'
 import { createRevision } from '@dsh-evolve/core/revision'
 import { contentHash } from '@dsh-evolve/core/tree'
 import { Lifecycle, DEFAULT_EXPERIMENT_BUDGET, episodeSummary, lifecycleSummary, processingTokens, type EvolutionEpisode, type Requirement, type TaskRun, type TaskStatus } from '@dsh-evolve/core/lifecycle'
+import { isContinuationText } from '@dsh-evolve/core'
 import { POST_TASK_TOKEN_CEILING, POST_TASK_WALL_CEILING, POST_TASK_OUTPUT_TOKENS } from '@dsh-evolve/core/experiment-budget'
 import { checkRequirements, digest } from '@dsh-evolve/core/task-snapshot'
 import type { EvidenceSource } from '@dsh-evolve/observer'
 import { dueRules, parseLoopRules, type LoopRule } from './loop-rules.js'
-import { experimentModel, localFileRunner } from './experiment-adapter.js'
+import { archiveExistingProbeSessions, experimentModel, localFileRunner } from './experiment-adapter.js'
 import { AutomaticLifecycle } from './automatic-lifecycle.js'
 
 export const name = 'evolve-agent'
@@ -41,10 +42,18 @@ export interface Config {
   worker: boolean
   automaticLifecycle: boolean
   automaticIdleMs: number
+  /** Quiet time after the last user message before observation starts; each message restarts it. */
+  automaticSettleMs: number
   automaticTimeoutMs: number
   automaticMaxCalls: number
   automaticMaxProcessingTokens: number
   automaticMaxOutputTokens: number
+  /** Auto phase checkpoint after a delivery; manual keeps only the explicit action. */
+  checkpoint: 'auto' | 'manual'
+  checkpointIdleMs: number
+  checkpointCooldownMs: number
+  /** Require at least one continuation turn before auto-closing a phase. */
+  checkpointMinTurns: number
   workerDirectory?: string
   workerProvider?: string
   workerModel?: string
@@ -53,8 +62,9 @@ export const DEFAULT_CONFIG: Config = { enabled: true, proposer: 'llm', repeatFa
   probeMaxOutputTokens: POST_TASK_OUTPUT_TOKENS, postTaskMaxProcessingTokens: POST_TASK_TOKEN_CEILING, postTaskMaxWallMs: POST_TASK_WALL_CEILING,
   postTaskStrategyVariants: 2, postTaskMaxDepth: 3,
   maxProposalTokens: POST_TASK_OUTPUT_TOKENS, probe: true, proposeTimeoutMs: 60000, worker: true,
-  automaticLifecycle: true, automaticIdleMs: 300, automaticTimeoutMs: 120000, automaticMaxCalls: 6,
-  automaticMaxProcessingTokens: 500000, automaticMaxOutputTokens: 32768 }
+  automaticLifecycle: true, automaticIdleMs: 300, automaticSettleMs: 4000, automaticTimeoutMs: 120000, automaticMaxCalls: 6,
+  automaticMaxProcessingTokens: 500000, automaticMaxOutputTokens: 32768,
+  checkpoint: 'auto', checkpointIdleMs: 90_000, checkpointCooldownMs: 600_000, checkpointMinTurns: 1 }
 export const Config: z<Config> = z.object({
   enabled: z.boolean().default(true), proposer: z.union(['llm', 'heuristic', 'script'] as const).default('llm'),
   probeMaxOutputTokens: z.number().step(1).min(1).default(POST_TASK_OUTPUT_TOKENS),
@@ -67,8 +77,11 @@ export const Config: z<Config> = z.object({
   maxProposalTokens: z.number().step(1).min(1).default(POST_TASK_OUTPUT_TOKENS), probe: z.boolean().default(true),
   proposeTimeoutMs: z.number().step(1).min(1).default(60000), worker: z.boolean().default(true),
   automaticLifecycle: z.boolean().default(true), automaticIdleMs: z.number().step(1).min(0).default(300),
+  automaticSettleMs: z.number().step(1).min(0).default(4000),
   automaticTimeoutMs: z.number().step(1).min(1).default(120000), automaticMaxCalls: z.number().step(1).min(1).default(6),
   automaticMaxProcessingTokens: z.number().step(1).min(1).default(500000), automaticMaxOutputTokens: z.number().step(1).min(1).default(32768),
+  checkpoint: z.union(['auto', 'manual'] as const).default('auto'), checkpointIdleMs: z.number().step(1).min(0).default(90_000),
+  checkpointCooldownMs: z.number().step(1).min(0).default(600_000), checkpointMinTurns: z.number().step(1).min(1).default(1),
   workerDirectory: z.string(), workerProvider: z.string(), workerModel: z.string(),
 })
 export interface ProposeOutcome { ok: boolean; reason: string; revisionId?: string; rationale?: string; episodeId?: string }
@@ -81,6 +94,7 @@ export interface EvolveAgentService {
   jobs(agent: Agent): Promise<ReturnType<typeof episodeSummary>[]>
   work(agent: Agent, id?: string): Promise<EvolutionEpisode | undefined>
   retryObservation(agent: Agent): Promise<void>
+  checkpoint(agent: Agent): Promise<{ ok: boolean; episodeId?: string; reason: string }>
   cancel(agent: Agent, id: string): Promise<void>
   resume(agent: Agent, id: string): Promise<void>
 }
@@ -130,7 +144,9 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
     if (local.taskId) {
       const previous = (await lifecycle.read()).tasks[local.taskId]
       if (prompt && previous && !['active', 'awaiting-input'].includes(previous.status)) {
-        await ctx.evolve.clearForTask(agent)
+        // A checkpoint closes a phase, not the session workstream. Keep the
+        // active revision/overlay so the next phase continues from it.
+        if (previous.completionKind !== 'checkpoint') await ctx.evolve.clearForTask(agent)
         delete local.taskId; local.shaped = false; local.edits = 0; local.tokens = 0; local.pending = undefined; local.lastProposalStep = -1000; local.notifiedAdoptions.clear()
       }
     }
@@ -187,7 +203,16 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
     return { entries: 0, episodeId: episode.id, status: episode.status, reason: `${episode.reason}. One post-task experiment per task; repeated reflect/probe returns the existing experiment. Use resume for an interrupted experiment, or start a new task for another comparison.` }
   }
   const applySelected = async (agent: Agent, job: EvolutionEpisode): Promise<ApplyOutcome | undefined> => {
-    if (!allowed(agent) || job.status !== 'selected' || stateOf(agent).taskId !== job.taskId) return
+    if (!allowed(agent) || job.status !== 'selected') return
+    const snapshot = await life(agent).read()
+    const taskId = stateOf(agent).taskId
+    const current = taskId ? snapshot.tasks[taskId] : undefined
+    const samePhase = current?.id === job.taskId
+    const continuation = job.checkpoint === true && current !== undefined && job.workstreamId !== undefined
+      && current.workstreamId === job.workstreamId && current.startedAt > job.createdAt
+      && snapshot.workstreams?.[job.workstreamId]?.goalHash === job.goalHash
+      && ['active', 'awaiting-input'].includes(current.status)
+    if (!samePhase && !continuation) return
     const winner = job.candidates.find(candidate => candidate.id === job.comparison?.winner)
     if (!winner || ctx.evolve.current(agent)?.contentHash === contentHash(winner.tree)) return
     const revision = createRevision({ parent: ctx.evolve.current(agent)?.id ?? null, tree: winner.tree,
@@ -211,12 +236,16 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
     return result
   }
   const automatic = new AutomaticLifecycle(ctx, {
-    enabled: settings.automaticLifecycle && settings.proposer === 'llm', idleMs: settings.automaticIdleMs,
+    enabled: settings.automaticLifecycle && settings.proposer === 'llm', idleMs: settings.automaticIdleMs, settleMs: settings.automaticSettleMs,
     timeoutMs: settings.automaticTimeoutMs, maxCalls: settings.automaticMaxCalls,
     maxProcessingTokens: settings.automaticMaxProcessingTokens, maxOutputTokens: settings.automaticMaxOutputTokens,
-    experimentBudget: postTaskLimits(),
+    experimentBudget: postTaskLimits(), checkpoint: settings.checkpoint, checkpointIdleMs: settings.checkpointIdleMs,
+    checkpointCooldownMs: settings.checkpointCooldownMs, checkpointMinTurns: settings.checkpointMinTurns,
   }, { allowed, task: ensureTask, completedTurn: agent => !stateOf(agent).awaitingUser && stateOf(agent).finalFinish === 'stop' && !stateOf(agent).signal?.aborted, wakeWorker: () => wakeWorker() })
   ctx.effect(() => () => automatic.dispose())
+  // Older probe sessions may still be visible in the workspace list. Archive
+  // them without deleting their audit trail; new probes archive themselves.
+  void archiveExistingProbeSessions(ctx)
   const service: EvolveAgentService = {
     proposeNow, reflect,
     state(agent) { const s = states.get(agent); return s ? { task: s.task, taskType: s.taskType, step: s.step, shaped: s.shaped, ...(s.taskId ? { taskId: s.taskId } : {}), automation: automatic.summary(agent) } : undefined },
@@ -232,14 +261,19 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
       const snapshot = await life(agent).read()
       return lifecycleSummary(snapshot).experiments
     },
-    work, retryObservation: agent => automatic.retry(agent), cancel: (agent, id) => life(agent).cancel(id), resume: async (agent, id) => { await life(agent).resume(id); wakeWorker() },
+    work, retryObservation: agent => automatic.retry(agent), checkpoint: agent => automatic.checkpoint(agent, 'manual'),
+    cancel: (agent, id) => life(agent).cancel(id), resume: async (agent, id) => { await life(agent).resume(id); wakeWorker() },
   }
   ctx.provide('evolveAgent', service)
 
   ctx.on('agent/inbox/inserted', ({ agent, message }) => {
     if (message.source.kind === 'user' && allowed(agent)) { automatic.changed(agent); delete stateOf(agent).finalFinish; delete stateOf(agent).awaitingUser }
   })
-  ctx.on('agent/status', ({ agent, status }) => { if (status === 'idle' && allowed(agent)) automatic.schedule(agent, true) })
+  ctx.on('agent/status', ({ agent, status }) => {
+    if (status !== 'idle' || !allowed(agent)) return
+    automatic.schedule(agent, true)
+    automatic.scheduleCheckpoint(agent)
+  })
   ctx.on('agent/disposed', ({ agent }) => automatic.cancel(agent, 'Agent disposed.'))
 
   ctx.on('agent/pre-step', async (payload, next) => {
@@ -249,14 +283,14 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
     try {
       if (!(await life(agent).read()).enabled) { await ctx.evolve.setEnabled(agent, false); return decision }
       const incoming = textOf(payload.messages)
-      const previous = local.taskId ? (await life(agent).read()).tasks[local.taskId] : undefined
+      let previous = local.taskId ? (await life(agent).read()).tasks[local.taskId] : undefined
+      if (incoming && previous && ['active', 'awaiting-input'].includes(previous.status) && isContinuationText(incoming)) {
+        await automatic.checkpoint(agent, 'user-continue').catch(error => ctx.logger.warn('evolve continuation checkpoint: %o', error))
+        previous = (await life(agent).read()).tasks[previous.id] ?? previous
+      }
       if (incoming && previous && ['active', 'awaiting-input'].includes(previous.status) && local.lastUserText !== incoming && !previous.prompt.endsWith(incoming)) {
-        await life(agent).journal.update(state => {
-          const task = state.tasks[previous.id]!
-          if (!['active', 'awaiting-input'].includes(task.status)) return
-          task.prompt += `\n\nUser update:\n${incoming}`; task.generation += 1; task.status = 'active'; task.requirements = []
-          local.task = task.prompt
-        })
+        const updated = await life(agent).updateTaskPrompt(previous.id, incoming)
+        local.task = updated.prompt
       }
       if (incoming) local.lastUserText = incoming
       if (local.preparing || !local.taskId || incoming && previous && !['active', 'awaiting-input'].includes(previous.status)) {

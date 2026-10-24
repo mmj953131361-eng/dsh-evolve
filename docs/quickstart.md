@@ -29,9 +29,9 @@ macOS 桌面版如果提示找不到 `dsh`，把命令中的 `dsh` 替换为：
 
 ## 2. 下载插件包
 
-打开 [Releases](https://github.com/mmj953131361-eng/dsh-evolve/releases)，选择 `v0.2.2-dev.4.public.1` 预发布，下载 Assets 中的：
+打开 [Releases](https://github.com/mmj953131361-eng/dsh-evolve/releases)，选择 `v0.2.2-dev.5` 预发布，下载 Assets 中的：
 
-- `dsh-evolve-bundle-0.2.2-dev.4.public.1.tgz`：可安装插件，不是页面自动生成的 Source code 压缩包。
+- `dsh-evolve-bundle-0.2.2-dev.5.tgz`：可安装插件，不是页面自动生成的 Source code 压缩包。
 - `evo-first-run.patch.yml`：首次仅验证加载，关闭 Evo 模型调用。
 - `evo-learning.patch.yml`：显式开启有界学习的示例配置。
 - `SHA256SUMS`：可选的文件校验清单。
@@ -45,7 +45,7 @@ macOS 桌面版如果提示找不到 `dsh`，把命令中的 `dsh` 替换为：
 退出对应 DSH 实例后安装（将路径替换为真实下载位置）：
 
 ```sh
-dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.4.public.1.tgz
+dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.5.tgz
 ```
 
 安装到 `web` 不会自动影响 `desktop`，反之亦然。重启对应 Profile 后，**新建会话**再验证。
@@ -58,7 +58,7 @@ dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev
 
 ```sh
 dsh --profile evo-demo --from-default-profile web --dump-config
-dsh plugin --profile evo-demo add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.4.public.1.tgz
+dsh plugin --profile evo-demo add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.5.tgz
 dsh --profile evo-demo --patch /完整下载路径/evo-first-run.patch.yml --port 3081
 ```
 
@@ -80,7 +80,7 @@ dsh --profile evo-demo --patch /完整下载路径/evo-learning.patch.yml --port
 4. 照常与 DSH 对话，无需调用 `evolve_task` 或记住学习命令。
 5. 打开 Evo 入口，先看状态卡；需要时再展开“学习记录 / 变化 / 经验”。
 
-这个版本是任务边界驱动的学习，尚不代表完整的长期项目管理。闲置、文件存在、助手自称完成都不足以单独触发“已完成”。任务缺少可核对的要求或交付证据时，Evo 可以保持观察，不应为了看到“进化”而强制批准。
+这个版本支持同一会话中的阶段学习：有要求和阶段交付证据后可以排队实验，也可在面板选择“学习这个阶段”。继续下一阶段会保留原任务上下文，实质性需求变化会使旧候选失效。它尚不代表完整的长期项目管理。闲置、文件存在、助手自称完成都不足以单独触发“已完成”。任务缺少可核对的要求或交付证据时，Evo 可以保持观察，不应为了看到“进化”而强制批准。
 
 后台候选使用受限本地文件工具；首次应选择本地资料和文件交付任务。依赖外网、Shell 或完整开发环境的任务，不能据此期待后台原样重放。
 
