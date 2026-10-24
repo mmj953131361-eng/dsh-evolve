@@ -16,7 +16,7 @@ export interface AutomationSettings {
   /** Quiet period after the last user message before observation may start; each new message restarts it. */
   settleMs: number
   timeoutMs: number
-  /** Completed observer calls per stage. Calls aborted before they produced a result do not count here. */
+  /** Completed observer calls per stage and frozen input version; token spending stays task-wide. */
   maxCalls: number
   maxProcessingTokens: number
   maxOutputTokens: number
@@ -26,7 +26,7 @@ export interface AutomationSettings {
   checkpointCooldownMs: number
   checkpointMinTurns: number
 }
-interface CallRecord { id: string; stage: 'requirements' | 'completion'; status: 'reserved' | 'settled' | 'unknown'; maximum: number; charged: number; usage?: Usage }
+interface CallRecord { id: string; inputHash?: string; stage: 'requirements' | 'completion'; status: 'reserved' | 'settled' | 'unknown'; maximum: number; charged: number; usage?: Usage }
 interface TaskAutomation {
   inputHash: string; status: string; detail: string; actionable?: boolean; delivery?: 'files' | 'answer'
   requirements?: Requirement[]; citations?: { id: string; path: string; quote: string; sourceHash: string; verification: 'deterministic-and-semantic' | 'semantic-only' }[]
@@ -208,12 +208,14 @@ export class AutomaticLifecycle {
     await journal.update(state => {
       const record = state.tasks[task.id]!
       // A call that was aborted before returning a result (status 'unknown') still counts toward the token
-      // ceiling, which is the real spend, but not toward the call count: a user who keeps typing must not be able
-      // to exhaust the observer by interrupting it. Each stage is counted on its own so requirement extraction
-      // cannot starve completion observation.
-      const counted = record.calls.filter(call => call.stage === stage && call.status === 'settled').length
-      if (counted >= this.settings.maxCalls || record.calls.reduce((sum, call) => sum + call.charged, 0) + maximum > this.settings.maxProcessingTokens) throw new Error('Automatic task-observation budget exhausted; existing task remains unchanged.')
-      record.calls.push({ id, stage, status: 'reserved', maximum, charged: maximum })
+      // ceiling, but not toward the call count. The call ceiling bounds repeated observation of one input
+      // version, not the number of user turns. Stage counts are separate; all versions retain their charges.
+      const counted = record.calls.filter(call => (call.inputHash ?? record.inputHash) === record.inputHash
+        && call.stage === stage && call.status === 'settled').length
+      if (counted >= this.settings.maxCalls) throw new Error(`Automatic task-observation call budget exhausted for current input (${stage}: ${counted}/${this.settings.maxCalls}); existing task remains unchanged.`)
+      const charged = record.calls.reduce((sum, call) => sum + call.charged, 0)
+      if (charged + maximum > this.settings.maxProcessingTokens) throw new Error(`Automatic task-observation token budget exhausted (${charged} charged + ${maximum} reserved > ${this.settings.maxProcessingTokens}); existing task remains unchanged.`)
+      record.calls.push({ id, inputHash: record.inputHash, stage, status: 'reserved', maximum, charged: maximum })
     })
     let result: Awaited<ReturnType<typeof model.complete>>
     try { result = await model.complete({ stage, prompt, maxTokens: limit, signal }) }
@@ -242,6 +244,9 @@ export class AutomaticLifecycle {
     const inputHash = digest(JSON.stringify({ prompt: task.prompt, snapshot: snapshot.digest }))
     let record = await journal.update(state => {
       const previous = state.tasks[task.id]
+      // Older journals have no per-call input identity. Bind them conservatively to the previously
+      // recorded input before switching versions, preserving both their count and lifetime charges.
+      if (previous) for (const call of previous.calls) call.inputHash ??= previous.inputHash
       if (previous?.inputHash === inputHash) return previous
       return state.tasks[task.id] = { inputHash, status: 'extracting', detail: 'Reading task requirements from frozen inputs.', calls: previous?.calls ?? [] }
     })

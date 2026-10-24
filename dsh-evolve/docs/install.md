@@ -1,4 +1,4 @@
-# 安装与运行（0.2.2-dev.5）
+# 安装与运行（0.2.2-dev.6）
 
 普通用户优先按[Quickstart](../../docs/quickstart.md)下载预构建包安装；以下是源码构建及进阶配置。
 
@@ -8,7 +8,7 @@
 pnpm install
 pnpm build
 pnpm --filter @dsh-evolve/bundle pack --pack-destination "$PWD/dist"
-dsh plugin --profile <name> add ./dist/dsh-evolve-bundle-0.2.2-dev.5.tgz
+dsh plugin --profile <name> add ./dist/dsh-evolve-bundle-0.2.2-dev.6.tgz
 dsh --profile <name> --dump-config
 ```
 
@@ -107,3 +107,9 @@ Web 面板默认只显示当前会话的状态卡：正在做什么、当前策�
 自动阶段检查默认开启，`checkpoint: manual` 可改为手动。`checkpointIdleMs`、`checkpointCooldownMs` 和 `checkpointMinTurns` 控制等待、冷却和最少轮数。闲置本身不构成完成证据。阶段学习结果不能单独作为扩大到项目或 Profile 的证据。
 
 适用的数据文件任务还会在冻结候选后生成新输入、独立推导预期并重复执行。缺少可替换数据或可靠预期时会记录跳过原因。这是额外的选择证据，不代表模型质量已经得到证明；所有调用仍受同一预算约束。
+
+## 自动观察次数与 token 上限
+
+`automaticMaxCalls` 按每版任务输入、每个观察阶段分别计数，不是会话轮数上限。补充或修改任务要求后会有新的观察额度；同一版要求反复重试不会重置次数。`automaticMaxProcessingTokens` 仍覆盖整个任务，包括先前输入版本和被中断的请求，不能靠连续修改要求扩额。
+
+0.2.2-dev.6 修复正常间隔多轮对话停止观察的问题，面板也会分别解释次数上限与 token 上限。

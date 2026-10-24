@@ -1,6 +1,6 @@
 {
   "name": "@dsh-evolve/loop",
-  "version": "0.2.2-dev.5",
+  "version": "0.2.2-dev.6",
   "description": "evolve-loop: a source copy of @deepseek-ai/dsh-agent-loop with controlled variation points",
   "type": "module",
   "main": "lib/index.js",

@@ -1,6 +1,6 @@
 {
   "name": "@dsh-evolve/bundle",
-  "version": "0.2.2-dev.5",
+  "version": "0.2.2-dev.6",
   "description": "Self-evolving harness scaffolding for DeepSeek Harness",
   "type": "module",
   "files": [

@@ -45,7 +45,9 @@ export interface Config {
   /** Quiet time after the last user message before observation starts; each message restarts it. */
   automaticSettleMs: number
   automaticTimeoutMs: number
+  /** Completed calls per observer stage and input version, not a conversation-turn ceiling. */
   automaticMaxCalls: number
+  /** Task-wide processing-token ceiling, including interrupted calls and previous input versions. */
   automaticMaxProcessingTokens: number
   automaticMaxOutputTokens: number
   /** Auto phase checkpoint after a delivery; manual keeps only the explicit action. */
