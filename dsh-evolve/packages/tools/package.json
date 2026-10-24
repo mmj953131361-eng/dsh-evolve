@@ -1,6 +1,6 @@
 {
   "name": "@dsh-evolve/tools",
-  "version": "0.2.2-dev.6",
+  "version": "0.2.2-dev.10",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

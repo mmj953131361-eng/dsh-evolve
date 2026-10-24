@@ -44,8 +44,9 @@ export interface Config {
   automaticIdleMs: number
   /** Quiet time after the last user message before observation starts; each message restarts it. */
   automaticSettleMs: number
+  /** Deadline for each observer attempt, including model-route resolution. Retries get a fresh deadline. */
   automaticTimeoutMs: number
-  /** Completed calls per observer stage and input version, not a conversation-turn ceiling. */
+  /** Completed calls per evidence unit, observer stage and input version, not a conversation-turn ceiling. */
   automaticMaxCalls: number
   /** Task-wide processing-token ceiling, including interrupted calls and previous input versions. */
   automaticMaxProcessingTokens: number
@@ -64,8 +65,8 @@ export const DEFAULT_CONFIG: Config = { enabled: true, proposer: 'llm', repeatFa
   probeMaxOutputTokens: POST_TASK_OUTPUT_TOKENS, postTaskMaxProcessingTokens: POST_TASK_TOKEN_CEILING, postTaskMaxWallMs: POST_TASK_WALL_CEILING,
   postTaskStrategyVariants: 2, postTaskMaxDepth: 3,
   maxProposalTokens: POST_TASK_OUTPUT_TOKENS, probe: true, proposeTimeoutMs: 60000, worker: true,
-  automaticLifecycle: true, automaticIdleMs: 300, automaticSettleMs: 4000, automaticTimeoutMs: 120000, automaticMaxCalls: 6,
-  automaticMaxProcessingTokens: 500000, automaticMaxOutputTokens: 32768,
+  automaticLifecycle: true, automaticIdleMs: 300, automaticSettleMs: 4000, automaticTimeoutMs: 600000, automaticMaxCalls: 6,
+  automaticMaxProcessingTokens: 2000000, automaticMaxOutputTokens: 65536,
   checkpoint: 'auto', checkpointIdleMs: 90_000, checkpointCooldownMs: 600_000, checkpointMinTurns: 1 }
 export const Config: z<Config> = z.object({
   enabled: z.boolean().default(true), proposer: z.union(['llm', 'heuristic', 'script'] as const).default('llm'),
@@ -80,8 +81,8 @@ export const Config: z<Config> = z.object({
   proposeTimeoutMs: z.number().step(1).min(1).default(60000), worker: z.boolean().default(true),
   automaticLifecycle: z.boolean().default(true), automaticIdleMs: z.number().step(1).min(0).default(300),
   automaticSettleMs: z.number().step(1).min(0).default(4000),
-  automaticTimeoutMs: z.number().step(1).min(1).default(120000), automaticMaxCalls: z.number().step(1).min(1).default(6),
-  automaticMaxProcessingTokens: z.number().step(1).min(1).default(500000), automaticMaxOutputTokens: z.number().step(1).min(1).default(32768),
+  automaticTimeoutMs: z.number().step(1).min(1).default(600000), automaticMaxCalls: z.number().step(1).min(1).default(6),
+  automaticMaxProcessingTokens: z.number().step(1).min(1).default(2000000), automaticMaxOutputTokens: z.number().step(1).min(1).default(65536),
   checkpoint: z.union(['auto', 'manual'] as const).default('auto'), checkpointIdleMs: z.number().step(1).min(0).default(90_000),
   checkpointCooldownMs: z.number().step(1).min(0).default(600_000), checkpointMinTurns: z.number().step(1).min(1).default(1),
   workerDirectory: z.string(), workerProvider: z.string(), workerModel: z.string(),
@@ -103,6 +104,7 @@ export interface EvolveAgentService {
 interface State {
   task: string; taskType: string; taskId?: string; step: number; shaped: boolean; edits: number; tokens: number;
   lastCheckpoint: number; lastProposalStep: number; signal?: AbortSignal; preparing?: Promise<TaskRun>; pending: string | undefined; rulesRevision?: string; rules: readonly LoopRule[]; fired: Set<string>; notifiedAdoptions: Set<string>; finalFinish?: string; lastUserText?: string; awaitingUser?: boolean;
+  pendingCancellation?: Promise<void>;
 }
 function classify(task: string): string {
   if (/csv|tsv|表格|分隔符/i.test(task)) return 'csv-cleanup'
@@ -143,6 +145,9 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
     ...(settings.postTaskMaxProbeRuns === undefined ? {} : { maxProbeRuns: settings.postTaskMaxProbeRuns }) })
   const ensureTask = async (agent: Agent, prompt?: string, requirements?: Requirement[]): Promise<TaskRun> => {
     const local = stateOf(agent); const lifecycle = life(agent)
+    // A new turn can start while the prior abort is still writing its terminal state.
+    // Observation and task creation must both wait, so the old cancellation cannot close new work.
+    await local.pendingCancellation
     if (local.taskId) {
       const previous = (await lifecycle.read()).tasks[local.taskId]
       if (prompt && previous && !['active', 'awaiting-input'].includes(previous.status)) {
@@ -254,7 +259,7 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
     task: ensureTask,
     async finish(agent, status, evidence) {
       if (status === 'awaiting-input') stateOf(agent).awaitingUser = true
-      if (status === 'cancelled') automatic.cancel(agent, 'Task explicitly cancelled.')
+      if (status === 'cancelled') automatic.cancel(agent, 'Task explicitly cancelled.', stateOf(agent).taskId)
       const task = await ensureTask(agent); await checkpoint(agent)
       const job = await life(agent).finish(task.id, status, evidence, allowed(agent), postTaskLimits())
       wakeWorker(); return job
@@ -269,20 +274,27 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
   ctx.provide('evolveAgent', service)
 
   ctx.on('agent/inbox/inserted', ({ agent, message }) => {
-    if (message.source.kind === 'user' && allowed(agent)) { automatic.changed(agent); delete stateOf(agent).finalFinish; delete stateOf(agent).awaitingUser }
+    if (message.source.kind === 'user' && allowed(agent)) {
+      const local = stateOf(agent); const incoming = textOf([message])
+      // Re-delivery of unchanged input must not cancel an otherwise valid observation.
+      automatic.changed(agent, Boolean(incoming && incoming !== local.lastUserText && !local.task.endsWith(incoming)))
+      delete local.finalFinish; delete local.awaitingUser
+    }
   })
   ctx.on('agent/status', ({ agent, status }) => {
     if (status !== 'idle' || !allowed(agent)) return
     automatic.schedule(agent, true)
     automatic.scheduleCheckpoint(agent)
   })
-  ctx.on('agent/disposed', ({ agent }) => automatic.cancel(agent, 'Agent disposed.'))
+  ctx.on('agent/disposed', ({ agent }) => automatic.cancel(agent, 'Agent disposed.', undefined, false))
 
   ctx.on('agent/pre-step', async (payload, next) => {
     const decision = await next()
     if (!allowed(payload.agent) || decision.kind !== 'enter') return decision
     const agent = payload.agent; const local = stateOf(agent); local.step = payload.step
     try {
+      await local.pendingCancellation
+      payload.signal.throwIfAborted()
       if (!(await life(agent).read()).enabled) { await ctx.evolve.setEnabled(agent, false); return decision }
       const incoming = textOf(payload.messages)
       let previous = local.taskId ? (await life(agent).read()).tasks[local.taskId] : undefined
@@ -291,8 +303,12 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
         previous = (await life(agent).read()).tasks[previous.id] ?? previous
       }
       if (incoming && previous && ['active', 'awaiting-input'].includes(previous.status) && local.lastUserText !== incoming && !previous.prompt.endsWith(incoming)) {
+        // Inbox insertion precedes consuming the message. An observer may have
+        // started between those events; invalidate again at the actual version change.
+        automatic.changed(agent)
         const updated = await life(agent).updateTaskPrompt(previous.id, incoming)
         local.task = updated.prompt
+        automatic.changed(agent)
       }
       if (incoming) local.lastUserText = incoming
       if (local.preparing || !local.taskId || incoming && previous && !['active', 'awaiting-input'].includes(previous.status)) {
@@ -303,6 +319,8 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
           const task = await Promise.race([local.preparing, new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), 500) })]).finally(() => { if (timer) clearTimeout(timer) })
           if (!task) return decision
           delete local.preparing
+          // A late observation of the cancelled prior task must not suppress the replacement.
+          automatic.changed(agent)
           automatic.schedule(agent, false)
         }
       }
@@ -310,11 +328,15 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
         local.signal = payload.signal
         const taskId = local.taskId
         payload.signal.addEventListener('abort', () => {
-          automatic.cancel(agent, 'Foreground task cancelled.')
-          void life(agent).read().then(snapshot => {
-            const task = snapshot.tasks[taskId]
-            if (task && ['active', 'awaiting-input'].includes(task.status)) return life(agent).finish(taskId, 'cancelled', 'host task signal aborted', false)
-          }).catch(error => ctx.logger.warn('evolve cancellation: %o', error))
+          if (local.signal !== payload.signal) return
+          automatic.cancel(agent, 'Foreground task cancelled.', taskId)
+          const cancellation: Promise<void> = (local.pendingCancellation ?? Promise.resolve()).then(async () => {
+            const task = (await life(agent).read()).tasks[taskId]
+            if (task && ['active', 'awaiting-input'].includes(task.status)) await life(agent).finish(taskId, 'cancelled', 'host task signal aborted', false)
+          }).catch(error => ctx.logger.warn('evolve cancellation: %o', error)).finally(() => {
+            if (local.pendingCancellation === cancellation) delete local.pendingCancellation
+          })
+          local.pendingCancellation = cancellation
         }, { once: true })
       }
       if (incoming) automatic.schedule(agent, false)
@@ -380,7 +402,7 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
       if (busy || stop.signal.aborted) return
       busy = true
       try {
-        for (const { agent } of ctx.evolve.liveBindings()) if (!allowed(agent)) automatic.cancel(agent, 'Evo is disabled.')
+        for (const { agent } of ctx.evolve.liveBindings()) if (!allowed(agent)) automatic.cancel(agent, 'Evo is disabled.', undefined, false)
         const lifecycles = new Map(ctx.evolve.liveBindings().map(({ binding }) => [binding.dir, binding.lifecycle]))
         if (settings.workerDirectory) lifecycles.set(settings.workerDirectory, new Lifecycle(settings.workerDirectory))
         for (const lifecycle of lifecycles.values()) {

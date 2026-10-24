@@ -38,15 +38,28 @@ export function experimentModel(ctx: Context, provider: string, model: string): 
       const route = await ctx.llm.resolveModelInfo(provider, model, signal)
       return outputAllowance(requested, estimateContextTokens(prompt) + 1024, route)
     },
-    async complete({ prompt, maxTokens, signal }) {
+    async complete({ prompt, maxTokens, signal, onProgress }) {
       let text = ''; let usage: Usage | undefined; let finish = 'missing'
+      const progress: { firstActivityAt?: string; lastActivityAt?: string; textChars: number; reasoningChars: number } = { textChars: 0, reasoningChars: 0 }
+      let failure: { code: string; message: string } | undefined
       for await (const chunk of ctx.llm.stream({ provider, model, maxTokens, temperature: 0,
         signal: AbortSignal.any([signal, AbortSignal.timeout(1_800_000)]), messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }] })) {
+        signal.throwIfAborted()
+        if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
+          progress.firstActivityAt ??= new Date().toISOString(); progress.lastActivityAt = new Date().toISOString()
+          if (chunk.type === 'text-delta') progress.textChars += chunk.text.length
+          else progress.reasoningChars += chunk.text.length
+          onProgress?.({ ...progress })
+        }
         if (chunk.type === 'text-delta') text += chunk.text
         else if (chunk.type === 'usage') usage = chunk.usage
-        else if (chunk.type === 'finish') finish = chunk.reason.kind
+        else if (chunk.type === 'finish') {
+          finish = chunk.reason.kind
+          if (chunk.reason.kind === 'aborted' || chunk.reason.kind === 'error') failure = chunk.reason.failure
+        }
       }
-      return { text, ...(usage ? { usage } : {}), ...(finish !== 'stop' ? { error: `improver finish: ${finish}; output ceiling ${maxTokens}` } : {}) }
+      return { text, finishReason: finish, ...(usage ? { usage } : {}), ...(failure ? { failure } : {}),
+        ...(finish !== 'stop' ? { error: `improver finish: ${finish}; output ceiling ${maxTokens}${failure ? `; ${failure.code}: ${failure.message}` : ''}` } : {}) }
     },
   }
 }

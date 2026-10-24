@@ -1,4 +1,4 @@
-# 安装与运行（0.2.2-dev.6）
+# 安装与运行（0.2.2-dev.10）
 
 普通用户优先按[Quickstart](../../docs/quickstart.md)下载预构建包安装；以下是源码构建及进阶配置。
 
@@ -8,7 +8,7 @@
 pnpm install
 pnpm build
 pnpm --filter @dsh-evolve/bundle pack --pack-destination "$PWD/dist"
-dsh plugin --profile <name> add ./dist/dsh-evolve-bundle-0.2.2-dev.6.tgz
+dsh plugin --profile <name> add ./dist/dsh-evolve-bundle-0.2.2-dev.10.tgz
 dsh --profile <name> --dump-config
 ```
 
@@ -26,6 +26,10 @@ allowBuilds:
 应看到 core/observer/probe/sandbox/agent/tools/commands/ui 组合。不要再单独安装 core。安装验证使用临时 DSH_HOME，不改用户现有 profile。
 
 本版本支持同一会话中的阶段学习、工作标题及阶段策略延续，并增加新输入验证。安装后重启对应 Profile，并使用新会话。
+
+本版改进自动观察恢复：每次模型调用独立计时，临时中断最多重试两次；无效 JSON 在相同冻结材料上最多重试一次，并重新校验结构与引用。需求分批提取、完成核查每批最多六条，输出截断时继续拆分；只有输入、需求、交付物和最终答复的版本一致时才复用已核验结果。更新要求会丢弃旧观察结果，明确停止会取消当前观察；新任务不受旧取消状态阻塞。
+
+观察默认输出上限为 `65536`（受模型路由和上下文余量约束），累计处理预算为 `2000000` token，每次调用尝试时限为 `600000` 毫秒。`automaticMaxCalls: 6` 按输入版本、阶段与证据单元计数；重试保留累计费用与未知用量预留。已有 Profile 的显式设置不会被升级覆盖。升级后重启 DSH；超时、输出超限或格式失败可从面板重试，已取消的任务请发新消息开始。恢复或入队不代表完成策略比较，也不证明候选更好。
 
 ## 前台与 worker
 
@@ -110,6 +114,6 @@ Web 面板默认只显示当前会话的状态卡：正在做什么、当前策�
 
 ## 自动观察次数与 token 上限
 
-`automaticMaxCalls` 按每版任务输入、每个观察阶段分别计数，不是会话轮数上限。补充或修改任务要求后会有新的观察额度；同一版要求反复重试不会重置次数。`automaticMaxProcessingTokens` 仍覆盖整个任务，包括先前输入版本和被中断的请求，不能靠连续修改要求扩额。
+`automaticMaxCalls` 按每版任务输入、每个观察阶段和证据单元分别计数，不是会话轮数上限。补充或修改任务要求后会有新的观察额度；同一版要求反复重试不会重置次数。`automaticMaxProcessingTokens` 仍覆盖整个任务，包括先前输入版本和被中断的请求，不能靠连续修改要求扩额。
 
-0.2.2-dev.6 修复正常间隔多轮对话停止观察的问题，面板也会分别解释次数上限与 token 上限。
+0.2.2-dev.10 修复正常间隔多轮对话停止观察的问题，面板也会分别解释次数上限与 token 上限。

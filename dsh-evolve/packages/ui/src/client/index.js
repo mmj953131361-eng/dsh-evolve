@@ -539,7 +539,7 @@ window.__ModuleLoader__.load({
       function localized(value) { return typeof value === 'string' ? value : value?.[language] || value?.en || '' }
       function viewOf(agent) { return agent?.view || null }
       function statusTone(state) {
-        return ['failed'].includes(state) ? 'attention' : state === 'pending-adoption' ? 'suggestions'
+        return ['failed', 'timed-out', 'output-limited', 'format-failed'].includes(state) ? 'attention' : state === 'pending-adoption' ? 'suggestions'
           : state === 'selected' ? 'improved' : state === 'kept-base' ? 'kept' : state === 'paused' ? 'paused' : 'learning'
       }
       function strategyText(view) { return view.strategy === 'revision' ? view.strategyVersion == null ? L.customStrategy : `${L.revisionStrategy}${view.strategyVersion}` : L.baseline }
