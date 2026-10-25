@@ -89,6 +89,8 @@ export interface HeldOutRun {
    */
   readonly conclusive?: boolean
   readonly limit?: Rollout['limit']
+  /** Why the run did not complete, bounded. Without it a failed run cannot be diagnosed after the fact. */
+  readonly reason?: string
 }
 
 /** A finished run is evidence only if it completed, or stopped on a resource ceiling with its files in place. */
@@ -105,17 +107,23 @@ export interface HeldOutVerdict {
   readonly cleanRate: number
   readonly worstMissed: number
   readonly meanSteps: number
+  /** Mean processing tokens over the runs that reported usage; 0 when none did. */
   readonly meanTokens: number
+  /** True when every counted run reported usage, so `meanTokens` is a real figure and not a missing one. */
+  readonly tokensKnown: boolean
 }
 
 export function verdictOf(candidateId: string, runs: readonly HeldOutRun[], ignore: ReadonlySet<string> = new Set()): HeldOutVerdict {
   const mine = runs.filter(r => r.candidateId === candidateId && r.conclusive !== false).map(r => ({ ...r, failed: r.failed.filter(id => !ignore.has(id)) }))
+  const measured = mine.filter(r => r.processingTokens > 0)
   const clean = mine.filter(r => isConclusive(r.status, r.limit) && r.total > 0 && r.failed.length === 0)
   const mean = (pick: (r: HeldOutRun) => number) => mine.length === 0 ? 0 : mine.reduce((sum, r) => sum + pick(r), 0) / mine.length
   return {
     candidateId, runs: mine.length, cleanRuns: clean.length, cleanRate: mine.length === 0 ? 0 : clean.length / mine.length,
     worstMissed: mine.reduce((worst, r) => Math.max(worst, r.failed.length), 0),
-    meanSteps: mean(r => r.steps), meanTokens: mean(r => r.processingTokens),
+    meanSteps: mean(r => r.steps), meanTokens: measured.length === 0 ? 0 : measured.reduce((sum, r) => sum + r.processingTokens, 0) / measured.length,
+    // A finished run cannot have used zero tokens, so zero means the host did not report usage.
+    tokensKnown: mine.length > 0 && measured.length === mine.length,
   }
 }
 
@@ -472,7 +480,12 @@ export function finalChoice(args: { selectorWinner: string | null; baselineId: s
   if (chosen === args.baselineId) return { winner: chosen, note: 'the comparison preferred the baseline' }
   const favoured = args.decisions.filter(d => d.standing === 'favoured' && args.eligible.has(d.candidateId))
   if (favoured.length === 0) return { winner: null, note: 'no candidate was reliably better on fresh input' }
-  const cost = (id: string) => args.verdicts.find(v => v.candidateId === id)?.meanTokens ?? Number.POSITIVE_INFINITY
+  // Cost decides among equally reliable candidates, but only on a figure that exists. Missing usage is not
+  // "free": comparing zeros would hand the win to whoever happens to be listed first while claiming it was the cheapest.
+  const verdictOfId = (id: string) => args.verdicts.find(v => v.candidateId === id)
+  const tokensKnown = favoured.every(d => verdictOfId(d.candidateId)?.tokensKnown === true)
+  const cost = (id: string) => tokensKnown ? verdictOfId(id)?.meanTokens ?? Number.POSITIVE_INFINITY : verdictOfId(id)?.meanSteps ?? Number.POSITIVE_INFINITY
   const best = [...favoured].sort((a, b) => cost(a.candidateId) - cost(b.candidateId))[0] as HeldOutDecision
-  return { winner: best.candidateId, effect: 'favoured', note: `the comparison on the training input found no difference; on fresh input ${best.reason}${favoured.length > 1 ? ` (${favoured.length} qualified; the cheapest was taken)` : ''}` }
+  const basis = favoured.length === 1 ? '' : ` (${favoured.length} qualified; ${tokensKnown ? 'the one using the fewest tokens' : 'token usage was not reported, so the one needing the fewest steps'} was taken)`
+  return { winner: best.candidateId, effect: 'favoured', note: `the comparison on the training input found no difference; on fresh input ${best.reason}${basis}` }
 }

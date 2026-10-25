@@ -1,4 +1,4 @@
-# 安装与运行（0.2.2-dev.10）
+# 安装与运行（0.2.2-dev.11）
 
 普通用户优先按[Quickstart](../../docs/quickstart.md)下载预构建包安装；以下是源码构建及进阶配置。
 
@@ -8,7 +8,7 @@
 pnpm install
 pnpm build
 pnpm --filter @dsh-evolve/bundle pack --pack-destination "$PWD/dist"
-dsh plugin --profile <name> add ./dist/dsh-evolve-bundle-0.2.2-dev.10.tgz
+dsh plugin --profile <name> add ./dist/dsh-evolve-bundle-0.2.2-dev.11.tgz
 dsh --profile <name> --dump-config
 ```
 
@@ -30,6 +30,8 @@ allowBuilds:
 本版改进自动观察恢复：每次模型调用独立计时，临时中断最多重试两次；无效 JSON 在相同冻结材料上最多重试一次，并重新校验结构与引用。需求分批提取、完成核查每批最多六条，输出截断时继续拆分；只有输入、需求、交付物和最终答复的版本一致时才复用已核验结果。更新要求会丢弃旧观察结果，明确停止会取消当前观察；新任务不受旧取消状态阻塞。
 
 观察默认输出上限为 `65536`（受模型路由和上下文余量约束），累计处理预算为 `2000000` token，每次调用尝试时限为 `600000` 毫秒。`automaticMaxCalls: 6` 按输入版本、阶段与证据单元计数；重试保留累计费用与未知用量预留。已有 Profile 的显式设置不会被升级覆盖。升级后重启 DSH；超时、输出超限或格式失败可从面板重试，已取消的任务请发新消息开始。恢复或入队不代表完成策略比较，也不证明候选更好。
+
+dev.11 修正新输入验证中同等合格候选的成本排序：只有所有候选的 token 用量完整时才按 token 比较，否则统一按步数比较并说明原因。缺失用量不当作零成本，平均 token 仅统计已报告用量的运行；未知用量仍保留预算预留。失败运行保留简短原因，诊断记录区分用量完全缺失与部分缺失。本次更新不改变选择后反思阶段的网络失败恢复。
 
 ## 前台与 worker
 

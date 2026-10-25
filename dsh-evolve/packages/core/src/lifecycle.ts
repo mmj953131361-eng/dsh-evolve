@@ -901,7 +901,8 @@ export class Lifecycle {
         const outcome = evaluateExpectations(result.artifacts, set.agreed)
         const record: HeldOutRun = { candidateId: candidate.id, n, status: result.status, passed: outcome.passed, total: set.agreed.length, failed: outcome.failed,
           steps: result.steps, processingTokens: result.usage ? processingTokens(result.usage) : 0, conclusive: isConclusive(result.status, result.limit),
-          ...(result.limit ? { limit: result.limit } : {}) }
+          ...(result.limit ? { limit: result.limit } : {}),
+          ...(result.status !== 'completed' && result.reason ? { reason: result.reason.slice(0, 300) } : {}) }
         await this.journal.update(state => { const live = this.job(state, jobId); this.running(state, live); live.heldOut!.runs.push(record) })
       }
     }
