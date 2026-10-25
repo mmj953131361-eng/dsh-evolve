@@ -4,22 +4,22 @@
       group: true
       config:
         - id: evolve-core
-          name: '@dsh-evolve/bundle/core'
+          name: '@dsh-evolve/bundle/host/core'
           config:
             enabled: true
             autonomy: ask-promote
             sessionAdoption: auto
         - id: evolve-observer
-          name: '@dsh-evolve/bundle/observer'
+          name: '@dsh-evolve/bundle/host/observer'
         - id: evolve-probe
-          name: '@dsh-evolve/bundle/probe'
+          name: '@dsh-evolve/bundle/host/probe'
           config:
             enabled: true
             k: 1
         - id: evolve-sandbox
-          name: '@dsh-evolve/bundle/sandbox'
+          name: '@dsh-evolve/bundle/host/sandbox'
         - id: evolve-agent
-          name: '@dsh-evolve/bundle/agent'
+          name: '@dsh-evolve/bundle/host/agent'
           config:
             enabled: true
             proposer: llm
@@ -33,13 +33,13 @@
             postTaskStrategyVariants: 2
             postTaskMaxDepth: 3
         - id: evolve-tools
-          name: '@dsh-evolve/bundle/tools'
+          name: '@dsh-evolve/bundle/host/tools'
         - id: evolve-commands
-          name: '@dsh-evolve/bundle/commands'
+          name: '@dsh-evolve/bundle/host/commands'
         - id: evolve-ui
           name: '@dsh-evolve/bundle'
     - id: evolve-loop
-      name: '@dsh-evolve/bundle/loop'
+      name: '@dsh-evolve/bundle/host/loop'
       disabled: true
       config:
         agents: []

@@ -44,6 +44,8 @@ window.__ModuleLoader__.load({
         reviewConfirm: 'Review and confirm',
         defer: 'Not now',
         statusUnavailable: 'Status unavailable',
+        incompatibleHost: 'Evo is disabled because its host APIs are incompatible. DSH can continue.',
+        waitingHost: 'Evo is waiting for host services.',
         upgradeHost: 'Update the Evo host to show its current status.',
         noCurrentSession: 'Choose a conversation to view its Evo status.',
         diagnostics: 'Diagnostics',
@@ -178,6 +180,8 @@ window.__ModuleLoader__.load({
         reviewConfirm: '查看并确认',
         defer: '暂不处理',
         statusUnavailable: '状态不可用',
+        incompatibleHost: 'Evo 与当前宿主 API 不兼容，已停用。DSH 可以继续使用。',
+        waitingHost: 'Evo 正在等待宿主服务。',
         upgradeHost: '请更新 Evo 宿主以显示当前状态。',
         noCurrentSession: '选择一个会话，查看它的 Evo 状态。',
         diagnostics: '诊断信息',
@@ -482,6 +486,13 @@ window.__ModuleLoader__.load({
         const previous = JSON.stringify({ agents, selected, error })
         error = ''
         try {
+          // Older independently installed UI packages have no compatibility route.
+          const compatibilityResponse = await fetch('/evolve/compatibility')
+          if (compatibilityResponse.ok) {
+            const compatibility = await compatibilityResponse.json()
+            if (compatibility.status === 'disabled') throw new Error(`${L.incompatibleHost} ${compatibility.reason || ''}`)
+            if (compatibility.status === 'waiting') throw new Error(`${L.waitingHost} ${Object.entries(compatibility.components || {}).filter(([, state]) => state !== 'active').map(([name]) => name).join(', ')}`)
+          }
           const body = await request('/evolve/state')
           if (disposed) return
           agents = Array.isArray(body.agents) ? body.agents : []

@@ -4,7 +4,7 @@
 
 Please use the repository's **Security → Report a vulnerability** flow for vulnerabilities, exposed credentials, filesystem escape, or adoption/approval bypass:
 
-https://github.com/mmj953131361-eng/dsh-evolve/security/advisories/new
+https://github.com/mmj953131361-eng/dsh-harness-evolve/security/advisories/new
 
 Do not post working exploits, secrets or private task snapshots in public issues. If private reporting is unavailable, open an issue requesting a private reporting channel without including sensitive details. Maintainers will assess reports on a best-effort basis; there is no guaranteed response SLA.
 

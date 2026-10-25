@@ -1,21 +1,23 @@
-# DSH Evo
+# DSH Harness Evolve
 
-**Our vision: let DSH evolve its harness as it works, and hot-load validated improvements into the agent.**
+**Let DSH improve its harness through work, verify changes through real reruns, and hot-load validated strategies into the agent.**
 
-[中文](README.md) · [User Quickstart (中文)](docs/quickstart.md) · [Downloads](https://github.com/mmj953131361-eng/dsh-evolve/releases)
+[中文](README.md) · [User Quickstart (中文)](docs/quickstart.md) · [Downloads](https://github.com/mmj953131361-eng/dsh-harness-evolve/releases)
 
-Evo observes grounded requirements and delivery evidence, proposes candidate harnesses, executes them against frozen inputs, composes a new harness from their evidence, and independently reruns it before selection. Keeping the baseline is a valid outcome.
+DSH Harness Evolve (**Evo** in the panel) is a self-evolution plugin for DeepSeek Harness. Work normally while Evo observes grounded task requirements and delivery evidence, explores candidate strategies in isolated copies, composes improvements from execution evidence and reruns them before selection. Keeping the baseline is a valid outcome.
+
+Each change should explain why it was proposed, what execution showed, who it affects and how to undo it. Current components include instructions, task context, memory text and native skills.
 
 ## Use the plugin
 
 You do not need to build this repository to try Evo.
 
-1. Prepare DSH **`0.2.1-rc.2`** with a working model route. See the [DSH project](https://github.com/deepseek-ai/deepseek-harness).
-2. Download `dsh-evolve-bundle-0.2.2-dev.11.tgz` from [Releases](https://github.com/mmj953131361-eng/dsh-evolve/releases).
+1. Prepare DSH with a working model route. dev.12 installation and boot have been checked on **`0.2.1-rc.2` and `0.2.1-rc.3`**. Other versions are capability-checked; see [host compatibility](dsh-evolve/docs/compat.md).
+2. Download `dsh-evolve-bundle-0.2.2-dev.12.tgz` from [Releases](https://github.com/mmj953131361-eng/dsh-harness-evolve/releases).
 3. Install it into the Profile you actually use (for example, `desktop`):
 
    ```sh
-   dsh plugin --profile desktop add /absolute/download/path/dsh-evolve-bundle-0.2.2-dev.11.tgz
+   dsh plugin --profile desktop add /absolute/download/path/dsh-evolve-bundle-0.2.2-dev.12.tgz
    ```
 
 4. Restart that Profile, open a local project and a fresh conversation, then work normally. The Evo entry shows learning status, changes and undo. A queued job has not executed yet; KEEP_BASE means no challenger was adopted.
@@ -40,7 +42,7 @@ Pause using the panel's advanced menu or `/evolve off`; `/evolve on` resumes lea
 
 ## Documentation
 
-See the [user Quickstart](docs/quickstart.md), [advanced installation guide](dsh-evolve/docs/install.md), [build instructions](CONTRIBUTING.md) and [security policy](SECURITY.md).
+See [host compatibility](dsh-evolve/docs/compat.md), the [user Quickstart](docs/quickstart.md), [advanced installation guide](dsh-evolve/docs/install.md), [build instructions](CONTRIBUTING.md) and [security policy](SECURITY.md).
 
 ## License and acknowledgements
 

@@ -55,6 +55,11 @@ await writeFile(
 
 // Every installable tarball must retain the licenses of its inlined sources.
 import { mkdir, copyFile } from 'node:fs/promises'
+await copyFile(new URL('./src/host-compatibility.mjs', import.meta.url), new URL('./lib/host-compatibility.mjs', import.meta.url))
+for (const name of ['core', 'observer', 'sandbox', 'probe', 'agent', 'tools', 'commands', 'ui', 'loop']) {
+  await writeFile(new URL(`./lib/host-${name}.js`, import.meta.url),
+    `import { hostEntry } from './host-compatibility.mjs'\nexport default hostEntry('${name}', () => import('./${name}.js'))\n`)
+}
 await mkdir(new URL('./LICENSES/', import.meta.url), { recursive: true })
 for (const [source, target] of [
   ['../../../LICENSE', './LICENSE'],

@@ -1,6 +1,6 @@
 {
   "name": "@dsh-evolve/core",
-  "version": "0.2.2-dev.11",
+  "version": "0.2.2-dev.12",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -87,14 +87,14 @@
     "typecheck": "tsc -b"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-session": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2",
-    "@deepseek-ai/schemastery": "3.18.5",
-    "@deepseek-ai/dsh-tool-skill": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-agent-preset-registry": "0.2.1-rc.2"
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-agent": "*",
+    "@deepseek-ai/dsh-session": "*",
+    "@deepseek-ai/dsh-skill": "*",
+    "@deepseek-ai/dsh-system-prompt": "*",
+    "@deepseek-ai/schemastery": "*",
+    "@deepseek-ai/dsh-tool-skill": "*",
+    "@deepseek-ai/dsh-agent-preset-registry": "*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.5",
@@ -120,12 +120,33 @@
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-agent-preset-registry": {
       "optional": true
+    },
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-agent": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-skill": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-system-prompt": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tool-skill": {
+      "optional": true
     }
   },
   "license": "(MIT AND Apache-2.0)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mmj953131361-eng/dsh-evolve.git",
+    "url": "git+https://github.com/mmj953131361-eng/dsh-harness-evolve.git",
     "directory": "dsh-evolve/packages/core"
   }
 }

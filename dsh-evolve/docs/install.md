@@ -1,27 +1,18 @@
-# 安装与运行（0.2.2-dev.11）
+# 安装与运行（0.2.2-dev.12）
 
 普通用户优先按[Quickstart](../../docs/quickstart.md)下载预构建包安装；以下是源码构建及进阶配置。
 
-要求 DSH 0.2.1-rc.2、Node ^22.19.0 或 >=24、可写工作区及可用模型路由。无需修改 DSH 或 harness2 源码。npm 尚未发布，使用 Release 或本地构建的 tarball：
+需要 DSH 原生 Agent、工具、技能与 LLM 服务，Node `^22.19.0 || >=24`、可写工作区及可用模型路由。dev.12 已验证 rc.2 / rc.3 安装与启动；不按版本号固定宿主，详见[兼容性](compat.md)。npm 尚未发布，使用 Release 或本地构建：
 
 ```sh
-pnpm install
+pnpm install --frozen-lockfile
 pnpm build
 pnpm --filter @dsh-evolve/bundle pack --pack-destination "$PWD/dist"
-dsh plugin --profile <name> add ./dist/dsh-evolve-bundle-0.2.2-dev.11.tgz
+dsh plugin --profile <name> add ./dist/dsh-evolve-bundle-0.2.2-dev.12.tgz
 dsh --profile <name> --dump-config
 ```
 
-安装包为独立 worker 声明了生产运行依赖。若 pnpm 11 报 `ERR_PNPM_IGNORED_BUILDS`，可在目标 profile 的 `pnpm-workspace.yaml` 合并以下设置再重试，保留已有设置；这是拒绝执行脚本，不是全局放行：
-
-```yaml
-allowBuilds:
-  '@google/genai': false
-  koffi: false
-  protobufjs: false
-```
-
-当前 macOS arm64 安装验证使用包中的预构建内容；其他平台若缺少原生预构建，须按对应 DSH 安装要求处理。
+bundle 的 DSH/Cordis/Schemastery 由宿主提供，不另装一套核心。模块导入、配置或初始化不兼容时停用 Evo，面板与 `/evolve/compatibility` 显示原因。升级后重启对应 Profile。仓库更名不会改变 `@dsh-evolve/bundle`、既有工具名或数据目录，原安装与撤销历史继续使用这些标识。
 
 应看到 core/observer/probe/sandbox/agent/tools/commands/ui 组合。不要再单独安装 core。安装验证使用临时 DSH_HOME，不改用户现有 profile。
 
@@ -37,7 +28,7 @@ dev.11 修正新输入验证中同等合格候选的成本排序：只有所有�
 
 默认 `proposer: llm`、`automaticLifecycle: true`、`worker: true`。正常聊天即可异步提取有来源的需求，在交付证据支持时自动结束任务并由宿主后台 worker 执行实验。普通回复结束只提供观察时机，idle、文件存在或模型自称完成都不能独自确立终态；等待用户输入时继续等待。`evolve_task` 和 `/evolve finish` 保留为显式协议/诊断入口。
 
-正常使用不需要命令；可选 `/evolve work [id]` 或工具 `evolve_work` 手动执行一项。宿主退出后内置 worker 随之停止，若需继续处理，启动独立进程：
+正常使用不需要命令；可选 `/evolve work [id]` 或工具 `evolve_work` 手动执行一项。宿主退出后内置 worker 随之停止。独立 worker 需要源码开发环境或一套另外配置、版本一致的 DSH SDK；bundle 不再为此安装 SDK，不要把 SDK 补装进 Desktop Profile。在独立环境运行：
 
 ```sh
 pnpm worker --workspace /path/to/task --config /path/to/provider.json --watch

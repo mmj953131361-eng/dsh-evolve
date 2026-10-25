@@ -1,26 +1,28 @@
-# DSH Evo
+# DSH Harness Evolve
 
-**愿景：让 DSH 在工作中持续进化 harness，把经过验证的改进热载到 Agent。**
+**让 DSH 从工作中改进 harness，通过真实重跑验证，并将改进热载到 Agent。**
 
-[English](README.en.md) · [快速开始](docs/quickstart.md) · [下载插件](https://github.com/mmj953131361-eng/dsh-evolve/releases) · [问题反馈](https://github.com/mmj953131361-eng/dsh-evolve/issues)
+[English](README.en.md) · [快速开始](docs/quickstart.md) · [下载插件](https://github.com/mmj953131361-eng/dsh-harness-evolve/releases) · [问题反馈](https://github.com/mmj953131361-eng/dsh-harness-evolve/issues)
 
-Evo 是 **DeepSeek Harness（DSH）的插件**。安装后照常与 DSH 对话，Evo 会观察有来源的任务要求和交付证据，在后台提出候选 harness、执行比较、合成并重新运行；有充分证据时采用新策略，也可以保留原策略。这里的 harness 指 Agent 的工作指令、任务上下文和原生技能等运行组件。
+DSH Harness Evolve（面板简称 **Evo**）是 **DeepSeek Harness 的自进化插件**。你照常描述任务、补充要求和检查交付物；Evo 从有来源的任务要求与执行证据中提出不同策略，在隔离副本里重跑、合成与比较，再决定采用新策略或保留原策略。
 
-## 我想直接使用
+我们希望每次改进都能回答：**为什么改、执行后怎样、影响谁、如何撤销。**当前优化对象包括工作指令、任务上下文、记忆文本和 DSH 原生技能；项目与 Profile 的共享改动需要确认。
 
-普通用户可以下载预构建 `.tgz`，**无需克隆本仓库、安装 pnpm 或自己构建**。
+## 快速开始
 
-1. 安装或准备 **DSH `0.2.1-rc.2`**，并在 DSH 中配置可用的模型。
-2. 从 [Releases](https://github.com/mmj953131361-eng/dsh-evolve/releases) 下载 `dsh-evolve-bundle-0.2.2-dev.11.tgz`。
-3. 把插件安装到你实际使用的 Profile，例如桌面端的 `desktop`：
+普通用户下载预构建 `.tgz` 即可，**无需克隆仓库或构建源码**。
+
+1. 准备 DSH 和可用模型。dev.12 已验证 DSH `0.2.1-rc.2` / `0.2.1-rc.3` 的安装与启动；其他版本按宿主 API 检查，详见[兼容性](dsh-evolve/docs/compat.md)。
+2. 从 [Releases](https://github.com/mmj953131361-eng/dsh-harness-evolve/releases) 下载 `dsh-evolve-bundle-0.2.2-dev.12.tgz`。
+3. 退出对应 DSH 实例，安装到实际使用的 Profile，例如桌面端 `desktop`：
 
    ```sh
-   dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.11.tgz
+   dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.12.tgz
    ```
 
-4. 重启对应 DSH Profile，打开一个本地项目和新会话，正常描述任务。打开 Evo 入口查看学习状态、变化和撤销。
+4. 重启对应 Profile，打开本地项目和新会话，正常完成任务。在 **Evo** 入口查看状态、策略变化和撤销。
 
-**首次安装、Web 版、模型配置、费用限制、排错和卸载，请按[用户 Quickstart](docs/quickstart.md)操作。** 首次可先停用自动后台执行，确认模型和预算后再启用；具体方法见 Quickstart。`queued` 只代表排队，`KEEP_BASE` 代表保留原策略，都不等于学习成功。
+首次安装、模型配置、学习开关与卸载见[用户 Quickstart](docs/quickstart.md)。后台实验登记、执行、选中与实际采用分别显示；排队不代表已进化，保留原策略也是正常结果。
 
 ## 自进化如何工作与生效
 
@@ -51,6 +53,7 @@ flowchart LR
 ## 文档
 
 - [用户 Quickstart](docs/quickstart.md)：下载、安装、模型、预算、暂停与卸载。
+- [宿主兼容性](dsh-evolve/docs/compat.md)：DSH 升级、加载状态和故障隔离。
 - [进阶安装与配置](dsh-evolve/docs/install.md)：源码构建、worker 和生效范围。
 - [构建与提交说明](CONTRIBUTING.md)：公开源码的构建流程。
 - [安全说明](SECURITY.md)：私密报告渠道和运行边界。
