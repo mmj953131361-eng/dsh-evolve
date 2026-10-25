@@ -21,7 +21,7 @@ ROOT_FILES = {'.gitignore', '.gitleaks.toml', 'AGENTS.md', 'LICENSE', 'NOTICE',
               'dsh-evolve/README.md', 'dsh-evolve/.gitignore', 'dsh-evolve/package.json',
               'dsh-evolve/pnpm-lock.yaml', 'dsh-evolve/pnpm-workspace.yaml',
               'dsh-evolve/tsconfig.json', 'dsh-evolve/tsconfig.base.json',
-              'dsh-evolve/docs/install.md', 'dsh-evolve/THIRD_PARTY_NOTICES.md',
+              'dsh-evolve/docs/install.md', 'dsh-evolve/docs/compat.md', 'dsh-evolve/THIRD_PARTY_NOTICES.md',
               'dsh-evolve/LICENSE', 'dsh-evolve/NOTICE',
               'licenses/Apache-2.0.txt', 'licenses/MIT-DeepSeek.txt'}
 PACKAGES = {'core', 'agent', 'observer', 'probe', 'sandbox', 'tools', 'commands', 'ui', 'bundle', 'loop'}
@@ -49,7 +49,7 @@ def allowed_source(name):
     if len(parts) == 4:
         return parts[3] in {'package.json', 'tsconfig.json', 'build.mjs', 'cordis.patch.yml',
                             'LICENSE', 'NOTICE', 'README.md'}
-    return (parts[3] == 'src' and Path(name).suffix in {'.ts', '.js'}) or (
+    return (parts[3] == 'src' and Path(name).suffix in {'.ts', '.js', '.mjs'}) or (
         parts[2] == 'loop' and parts[3] == 'locale' and Path(name).suffix == '.json')
 
 
@@ -83,7 +83,7 @@ def check_content(name, payload):
                 r'\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})\b']
     if any(re.search(pattern, value) for pattern in patterns):
         raise ValueError(f'credential pattern found in {name}; value withheld')
-    if Path(name).suffix in {'.ts', '.js'} and re.search(
+    if Path(name).suffix in {'.ts', '.js', '.mjs'} and re.search(
         r"(?:from|import)\s*['\"](?:vitest|@vitest/|node:test)|(?:^|\n)\s*(?:describe|it|test)\s*\(", value):
         raise ValueError(f'test code found in {name}')
 
@@ -135,7 +135,12 @@ def check_tarball(path):
             raise ValueError(f'{path}: inaccurate third-party license metadata')
         if any(isinstance(v, str) and v.startswith(('workspace:', 'file:', 'link:')) for v in manifest.get('dependencies', {}).values()):
             raise ValueError(f'{path}: local-only production dependency')
-        for required in ('lib/ui.js', 'lib/client.js', 'lib/worker.js', 'cordis.patch.yml'):
+        if any(name.startswith('@deepseek-ai/') for name in manifest.get('dependencies', {})):
+            raise ValueError(f'{path}: private DSH runtime must not be installed by the plugin')
+        for name in manifest.get('peerDependencies', {}):
+            if name.startswith('@deepseek-ai/') and not manifest.get('peerDependenciesMeta', {}).get(name, {}).get('optional'):
+                raise ValueError(f'{path}: host peer {name} would be auto-installed')
+        for required in ('lib/ui.js', 'lib/client.js', 'lib/worker.js', 'lib/host-ui.js', 'lib/host-core.js', 'lib/host-compatibility.mjs', 'cordis.patch.yml'):
             if f'package/{required}' not in entries:
                 raise ValueError(f'{path}: missing runtime entry {required}')
     print(f'OK: {Path(path).name}: runtime entries, licenses, notices, metadata and archive boundaries')

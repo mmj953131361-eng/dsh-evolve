@@ -1,4 +1,4 @@
-# Building DSH Evo
+# Building DSH Harness Evolve
 
 直接使用插件请看 [Quickstart](docs/quickstart.md)。欢迎提交问题、文档修正和运行源码 PR。
 
@@ -7,14 +7,14 @@
 Requirements: Node `^22.19.0 || >=24`, `pnpm@11.28.5`, Git and Python 3 for publication checks.
 
 ```sh
-git clone https://github.com/mmj953131361-eng/dsh-evolve.git
-cd dsh-evolve/dsh-evolve
+git clone https://github.com/mmj953131361-eng/dsh-harness-evolve.git
+cd dsh-harness-evolve/dsh-evolve
 pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm build
 mkdir -p dist
 pnpm --filter @dsh-evolve/bundle pack --pack-destination "$PWD/dist"
-python3 ../scripts/check-publication.py dist/dsh-evolve-bundle-0.2.2-dev.11.tgz
+python3 ../scripts/check-publication.py dist/dsh-evolve-bundle-0.2.2-dev.12.tgz
 ```
 
 No live model or credential is needed for these checks. Install the generated bundle only in a separate DSH Profile.

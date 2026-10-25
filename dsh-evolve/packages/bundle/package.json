@@ -1,7 +1,7 @@
 {
   "name": "@dsh-evolve/bundle",
-  "version": "0.2.2-dev.11",
-  "description": "Self-evolving harness scaffolding for DeepSeek Harness",
+  "version": "0.2.2-dev.12",
+  "description": "Verified harness evolution for DeepSeek Harness: native loading, evidence-based adoption and undo",
   "type": "module",
   "files": [
     "lib",
@@ -20,11 +20,8 @@
       "platform": "web"
     }
   },
-  "engines": {
-    "dsh": ">=0.2.1-rc.2 <0.3.0"
-  },
   "exports": {
-    ".": "./lib/ui.js",
+    ".": "./lib/host-ui.js",
     "./ui": "./lib/ui.js",
     "./core": "./lib/core.js",
     "./observer": "./lib/observer.js",
@@ -38,34 +35,43 @@
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json",
     "./worker": "./lib/worker.js",
-    "./scoped-harness": "./lib/scoped-harness.js"
+    "./scoped-harness": "./lib/scoped-harness.js",
+    "./host/core": "./lib/host-core.js",
+    "./host/observer": "./lib/host-observer.js",
+    "./host/probe": "./lib/host-probe.js",
+    "./host/sandbox": "./lib/host-sandbox.js",
+    "./host/agent": "./lib/host-agent.js",
+    "./host/tools": "./lib/host-tools.js",
+    "./host/commands": "./lib/host-commands.js",
+    "./host/ui": "./lib/host-ui.js",
+    "./host/loop": "./lib/host-loop.js"
   },
   "scripts": {
     "build": "node build.mjs"
   },
   "dependencies": {
     "yaml": "2.9.1",
-    "zod": "4.6.6",
-    "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-agent-loop": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-session": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-session-projection": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-fs-local": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-working-directory": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-llm-pi-ai": "0.2.1-rc.2",
-    "@deepseek-ai/schemastery": "3.18.5",
-    "@deepseek-ai/dsh-tool-skill": "0.2.1-rc.2"
+    "zod": "4.6.6"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-skill": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-brand": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-util-values": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-scope": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-session-persistence": "0.2.1-rc.2"
+    "@deepseek-ai/dsh-skill": "*",
+    "@deepseek-ai/dsh-brand": "*",
+    "@deepseek-ai/dsh-util-values": "*",
+    "@deepseek-ai/dsh-scope": "*",
+    "@deepseek-ai/dsh-session-persistence": "*",
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-agent": "*",
+    "@deepseek-ai/dsh-agent-loop": "*",
+    "@deepseek-ai/dsh-llm": "*",
+    "@deepseek-ai/dsh-session": "*",
+    "@deepseek-ai/dsh-session-projection": "*",
+    "@deepseek-ai/dsh-system-prompt": "*",
+    "@deepseek-ai/dsh-tools": "*",
+    "@deepseek-ai/dsh-fs-local": "*",
+    "@deepseek-ai/dsh-working-directory": "*",
+    "@deepseek-ai/dsh-llm-pi-ai": "*",
+    "@deepseek-ai/schemastery": "*",
+    "@deepseek-ai/dsh-tool-skill": "*"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.5",
@@ -96,14 +102,70 @@
     "@deepseek-ai/dsh-llm-pi-ai": "0.2.1-rc.2",
     "@deepseek-ai/dsh-tool-skill": "0.2.1-rc.2"
   },
-  "main": "lib/ui.js",
+  "main": "lib/host-ui.js",
   "bin": {
     "dsh-evolve-worker": "lib/worker.js"
   },
   "license": "(MIT AND Apache-2.0)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mmj953131361-eng/dsh-evolve.git",
+    "url": "git+https://github.com/mmj953131361-eng/dsh-harness-evolve.git",
     "directory": "dsh-evolve/packages/bundle"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-skill": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-brand": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-util-values": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-scope": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session-persistence": {
+      "optional": true
+    },
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-agent": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-agent-loop": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session-projection": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-system-prompt": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-fs-local": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-working-directory": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm-pi-ai": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tool-skill": {
+      "optional": true
+    }
   }
 }

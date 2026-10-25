@@ -130,10 +130,21 @@ export class Evolve {
   private readonly bindings = new WeakMap<Agent, EvolveBinding>()
   private readonly presetCache = new Map<string, { fingerprint: string; dispose: () => Promise<void> }>()
   private readonly live = new Map<string, { agent: Agent; binding: EvolveBinding }>()
+  private stopped = false
 
   constructor(ctx: Context, config: Config) {
     this.ctx = ctx
     this.config = { ...DEFAULT_CONFIG, ...config }
+    ctx.effect(() => async () => {
+      this.stopped = true
+      const bindings = [...this.live.values()].map(({ binding }) => binding)
+      for (const binding of bindings) { binding.enabled = false; binding.version++; binding.tree = Object.freeze({}) }
+      await Promise.allSettled(bindings.flatMap(binding => [
+        Promise.resolve().then(() => this.disposeSections(binding)),
+        this.disposeSkills(binding), this.disposePresets(binding),
+      ]))
+      this.live.clear()
+    })
     ctx.on('agent/disposed', ({ agent }) => {
       const binding = this.bindings.get(agent)
       if (binding) void this.disposePresets(binding).catch(error => ctx.logger.warn('preset disposal: %o', error))
@@ -867,7 +878,7 @@ export class Evolve {
   }
 
   private async bind(agent: Agent): Promise<void> {
-    if (this.bindings.has(agent)) return
+    if (this.stopped || this.bindings.has(agent)) return
     const cwd = agent.session.header.cwd ?? process.cwd()
     const dir = join(cwd, this.config.workspaceDir)
     const store = new FileRevisionStore(dir, String(agent.session.id))
@@ -919,6 +930,7 @@ export class Evolve {
       onApplied: (revision) => { binding.revision = revision },
     })
 
+    if (this.stopped) return
     this.bindings.set(agent, binding)
     this.live.set(String(agent.id), { agent, binding })
     await withLock(join(binding.dir, 'sessions', `${agent.session.id}.apply`), () => this.recoverCommittedAdoption(binding))
@@ -930,6 +942,7 @@ export class Evolve {
   }
 
   private async installRevision(agent: Agent, binding: EvolveBinding, revision: Revision): Promise<Overlay> {
+    if (this.stopped) throw new Error('Evo has been unloaded')
     const previous = { tree: binding.tree, revision: binding.revision }
     const token = binding.version + 1
     binding.version = token
@@ -994,7 +1007,7 @@ export class Evolve {
    * this method; the files remain durable for a web/new composition.
    */
   private async installPresets(agent: Agent, binding: EvolveBinding): Promise<void> {
-    if (!this.config.l2 || !binding.enabled || !this.may('l2-write')) return
+    if (this.stopped || !this.config.l2 || !binding.enabled || !this.may('l2-write')) return
     let registry: { register(definition: never): Promise<() => Promise<void>> } | undefined
     try {
       const get = (this.ctx as unknown as { get?: (name: string) => unknown }).get
@@ -1023,6 +1036,7 @@ export class Evolve {
       }
       try {
         const dispose = await registry.register(definition as never)
+        if (this.stopped) { await dispose(); continue }
         this.presetCache.set(definition.id, { fingerprint, dispose })
         binding.presetKeys.add(definition.id)
         await this.audit(agent, { event: 'l2-preset-registered', preset: definition.id, fingerprint })
@@ -1040,6 +1054,7 @@ export class Evolve {
   }
 
   private installSections(agent: Agent, binding: EvolveBinding): void {
+    if (this.stopped) return
     if (binding.sectionDisposers.length > 0) return
     binding.sectionDisposers.push(installPromptComponents(agent.ctx, () => binding.tree))
   }
@@ -1050,8 +1065,9 @@ export class Evolve {
 
   private async installSkills(agent: Agent, binding: EvolveBinding): Promise<void> {
     await this.disposeSkills(binding)
-    if (!binding.enabled) return
+    if (this.stopped || !binding.enabled) return
     binding.skillFiber = await installSkillComponents(agent.ctx, binding.tree)
+    if (this.stopped) await this.disposeSkills(binding)
   }
 
   private async disposeSkills(binding: EvolveBinding): Promise<void> {

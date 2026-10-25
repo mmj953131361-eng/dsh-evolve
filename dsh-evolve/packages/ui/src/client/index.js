@@ -44,6 +44,8 @@ window.__ModuleLoader__.load({
         reviewConfirm: 'Review and confirm',
         defer: 'Not now',
         statusUnavailable: 'Status unavailable',
+        incompatibleHost: 'Evo is disabled because its host APIs are incompatible. DSH can continue.',
+        waitingHost: 'Evo is waiting for host services.',
         upgradeHost: 'Update the Evo host to show its current status.',
         noCurrentSession: 'Choose a conversation to view its Evo status.',
         diagnostics: 'Diagnostics',
@@ -100,7 +102,7 @@ window.__ModuleLoader__.load({
         appliedStatus: 'Applied',
         rejectedStatus: 'Kept current setup',
         staleStatus: 'Expired',
-        jobs: 'Experiments', run: 'Run', cancel: 'Cancel', resume: 'Resume', revoke: 'Revoke', experienceState: 'Evidence level', button: 'Evolve', title: 'DSH Evolve', refresh: 'Refresh',
+        jobs: 'Experiments', run: 'Run', cancel: 'Cancel', resume: 'Resume', revoke: 'Revoke', experienceState: 'Evidence level', button: 'Evolve', title: 'Evo', refresh: 'Refresh',
         noAgent: 'No live agent. Open a session, then refresh.',
         enabled: 'enabled', revision: 'revision', recommended: 'recommended strategy', level: 'level', task: 'task', step: 'step',
         evolutions: 'evolutions', tokens: 'tokens',
@@ -178,6 +180,8 @@ window.__ModuleLoader__.load({
         reviewConfirm: '查看并确认',
         defer: '暂不处理',
         statusUnavailable: '状态不可用',
+        incompatibleHost: 'Evo 与当前宿主 API 不兼容，已停用。DSH 可以继续使用。',
+        waitingHost: 'Evo 正在等待宿主服务。',
         upgradeHost: '请更新 Evo 宿主以显示当前状态。',
         noCurrentSession: '选择一个会话，查看它的 Evo 状态。',
         diagnostics: '诊断信息',
@@ -234,7 +238,7 @@ window.__ModuleLoader__.load({
         appliedStatus: '已采用',
         rejectedStatus: '保持现状',
         staleStatus: '已过期',
-        jobs: '改进实验', run: '执行', cancel: '取消', resume: '恢复', revoke: '撤回', experienceState: '证据等级', button: '进化', title: 'DSH 进化', refresh: '刷新',
+        jobs: '改进实验', run: '执行', cancel: '取消', resume: '恢复', revoke: '撤回', experienceState: '证据等级', button: '进化', title: 'Evo', refresh: '刷新',
         noAgent: '没有活动 Agent。打开一个会话后刷新。',
         enabled: '启用', revision: '版本', recommended: '推荐策略', level: '层级', task: '任务', step: '步',
         evolutions: '进化次数', tokens: 'token',
@@ -482,6 +486,13 @@ window.__ModuleLoader__.load({
         const previous = JSON.stringify({ agents, selected, error })
         error = ''
         try {
+          // Older independently installed UI packages have no compatibility route.
+          const compatibilityResponse = await fetch('/evolve/compatibility')
+          if (compatibilityResponse.ok) {
+            const compatibility = await compatibilityResponse.json()
+            if (compatibility.status === 'disabled') throw new Error(`${L.incompatibleHost} ${compatibility.reason || ''}`)
+            if (compatibility.status === 'waiting') throw new Error(`${L.waitingHost} ${Object.entries(compatibility.components || {}).filter(([, state]) => state !== 'active').map(([name]) => name).join(', ')}`)
+          }
           const body = await request('/evolve/state')
           if (disposed) return
           agents = Array.isArray(body.agents) ? body.agents : []

@@ -1,7 +1,7 @@
-# DSH Evo runtime source
+# DSH Harness Evolve runtime
 
-DSH Evo is a plugin that lets DeepSeek Harness evolve its working strategies through candidate execution and comparison.
+DeepSeek Harness 的 harness 自进化插件，面板简称 Evo。由任务要求与交付证据生成候选，在隔离副本重跑、合成、比较，再按作用域采用并提供撤销。
 
-Use the [user Quickstart](../docs/quickstart.md) for installation, or [build instructions](../CONTRIBUTING.md) to compile this source tree. See [runtime configuration](docs/install.md) for worker and adoption settings.
+直接安装见[用户 Quickstart](../docs/quickstart.md)，源码构建见[构建说明](../CONTRIBUTING.md)，宿主升级见[兼容性](docs/compat.md)。内部 `@dsh-evolve/*` 包名和 `.dsh-evolve/` 数据标识保留兼容。
 
-This public source distribution excludes tests, fixtures and evaluation materials. Build success does not imply a quality improvement.
+此公开目录只包含运行源码、构建配置、许可证和用户文档。
