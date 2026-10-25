@@ -277,6 +277,11 @@ export function localFileRunner(ctx: Context, provider: string, model: string): 
         const checks = await checkRequirements(input.directory, input.task.requirements)
         const reportedUsage = messageUsage ? usage
           : Object.values(fallbackUsage).some(value => value > 0) ? fallbackUsage : undefined
+        // A rollout without usage is charged its full reservation and cannot be costed. Say which of the three
+        // causes applies instead of dropping it silently, so a host that never reports usage can be told apart
+        // from a run that was interrupted mid-request.
+        if (reportedUsage === undefined) trace.push('[USAGE_MISSING] no assistant/message usage and no streamed usage chunk was observed')
+        else if (unknownUsage) trace.push(`[USAGE_PARTIAL] a request had no settled usage; reporting withheld (message=${messageUsage}, streamed=${Object.values(fallbackUsage).some(value => value > 0)})`)
         const result: Rollout = {
           loaderVersion: NATIVE_DISCLOSURE_VERSION,
           status: input.signal.aborted ? 'cancelled' : timeout.aborted ? 'timeout' : limited || failure ? 'failed' : 'completed',
