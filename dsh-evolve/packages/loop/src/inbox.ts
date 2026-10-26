@@ -78,7 +78,7 @@ export class ReactLoopInbox implements InboxContract {
     private readonly dispatch: AgentEventDispatch,
   ) {}
 
-  /** Prompts awaiting individual turns. */
+  /** Prompts awaiting the next turn batch. */
   get nextTurn(): readonly UserMessage[] {
     return this.current()['next-turn']
   }
@@ -102,13 +102,13 @@ export class ReactLoopInbox implements InboxContract {
 
   /**
    * Remove and return the complete batch proposed for one step.
-   * @param target - whether this boundary also consumes one queued turn.
+   * @param target - whether this boundary also consumes the queued turn batch.
    * @param turn - turn that will own the claimed batch.
-   * @returns next-step input followed by the queued turn, when requested.
+   * @returns next-step input followed by all queued turns, when requested.
    */
   claim(target: InboxTarget, turn: number): UserMessage[] {
     const claimed = this.mutate('next-step', 0, this.nextStep.length, [], false)
-    if (target === 'next-turn') claimed.push(...this.mutate('next-turn', 0, 1, [], false))
+    if (target === 'next-turn') claimed.push(...this.mutate('next-turn', 0, this.nextTurn.length, [], false))
     for (const message of claimed) this.dispatch.emit('agent/inbox/claimed', { message, turn })
     return claimed
   }

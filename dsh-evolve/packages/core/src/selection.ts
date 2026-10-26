@@ -226,8 +226,11 @@ export interface Tally {
   readonly rounds: number
 }
 
-/** Count votes. A winner needs more than half of all rounds, so abstentions and splits keep the baseline. */
-export function tally(rounds: readonly (string | null)[]): Tally {
+/**
+ * Count votes. A winner needs more than half of the configured decision rounds,
+ * so abstentions, splits and rounds skipped after an early decision keep the baseline.
+ */
+export function tally(rounds: readonly (string | null)[], decisionRounds = rounds.length): Tally {
   const votes: Record<string, number> = {}
   let abstentions = 0
   for (const vote of rounds) {
@@ -235,6 +238,6 @@ export function tally(rounds: readonly (string | null)[]): Tally {
     else votes[vote] = (votes[vote] ?? 0) + 1
   }
   const best = Object.entries(votes).sort((a, b) => b[1] - a[1])[0]
-  const winner = best !== undefined && best[1] * 2 > rounds.length ? best[0] : null
+  const winner = best !== undefined && best[1] * 2 > decisionRounds ? best[0] : null
   return { winner, votes, abstentions, rounds: rounds.length }
 }

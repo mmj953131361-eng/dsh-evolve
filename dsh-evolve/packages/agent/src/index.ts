@@ -1,7 +1,7 @@
 /** DSH integration for the persistent task/experiment lifecycle. */
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import z from '@deepseek-ai/schemastery'
 import type { Evolve } from '@dsh-evolve/core/plugin'
@@ -116,6 +116,22 @@ function classify(task: string): string {
 }
 function textOf(messages: readonly UserMessage[]): string {
   return messages.filter(m => m.source.kind === 'user').flatMap(m => m.content).map(b => b.type === 'text' ? b.text : '').join('\n').trim()
+}
+
+/**
+ * Stock DSH claims one next-turn message per turn. Use its public durable event
+ * vocabulary to claim the rest for Evo's current pre-step, without marking live
+ * corrections as canceled or replacing the host loop.
+ */
+function claimRemainingTurns(agent: Agent, turn: number): UserMessage[] {
+  const messages = [...agent.inbox.nextTurn]
+  if (messages.length === 0) return messages
+  const dispatch = agentEvents(agent.ctx, agent)
+  agent.session.append('agent/inbox/spliced', {
+    target: 'next-turn', start: 0, removedCount: messages.length, inserted: [],
+  })
+  for (const message of messages) dispatch.emit('agent/inbox/claimed', { message, turn })
+  return messages
 }
 
 export function apply(ctx: Context, config: Partial<Config> = {}): void {
@@ -289,9 +305,24 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
   ctx.on('agent/disposed', ({ agent }) => automatic.cancel(agent, 'Agent disposed.', undefined, false))
 
   ctx.on('agent/pre-step', async (payload, next) => {
-    const decision = await next()
-    if (!allowed(payload.agent) || decision.kind !== 'enter') return decision
-    const agent = payload.agent; const local = stateOf(agent); local.step = payload.step
+    const agent = payload.agent
+    const queued = allowed(agent) && payload.step === 1 ? claimRemainingTurns(agent, payload.turn) : []
+    payload.messages.push(...queued)
+    const restoreQueued = () => {
+      if (queued.length > 0) agent.inbox.splice('next-turn', 0, 0, queued)
+    }
+    const decision = await next().catch(error => {
+      restoreQueued()
+      throw error
+    })
+    // Only the host's original claim is consumed by a rejected/aborted pre-step.
+    // Evo's additional claims remain pending for the next explicit wake.
+    if (decision.kind === 'reject' || payload.signal.aborted) {
+      restoreQueued()
+      return decision
+    }
+    if (!allowed(agent) || decision.kind !== 'enter') return decision
+    const local = stateOf(agent); local.step = payload.step
     try {
       await local.pendingCancellation
       payload.signal.throwIfAborted()

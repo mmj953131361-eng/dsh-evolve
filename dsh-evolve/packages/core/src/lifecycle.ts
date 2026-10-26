@@ -518,9 +518,11 @@ export class Lifecycle {
           }
           if (composed?.validation === 'valid') await this.roll(jobId, composed.id, task, runner, signal)
         }
-        await this.select(jobId, task, model, signal)
-        await this.verifyHeldOut(jobId, task, model, runner, signal)
-        await this.reflect(jobId, task, model, signal)
+        const comparison = await this.select(jobId, task, model, signal)
+        if (comparison.selectionStop !== 'abstained') {
+          await this.verifyHeldOut(jobId, task, model, runner, signal)
+          await this.reflect(jobId, task, model, signal)
+        }
         await this.commit(jobId)
       } catch (error) {
         await this.journal.update(state => {
@@ -723,9 +725,9 @@ export class Lifecycle {
       checks: run.checks.slice(0, 50).map(c => ({ ...c, evidence: excerpt(c.evidence, 200) })), trace: excerpt(run.trace, 1000) }
   }
 
-  private async select(jobId: string, task: TaskRun, model: ExperimentModel, signal: AbortSignal): Promise<void> {
+  private async select(jobId: string, task: TaskRun, model: ExperimentModel, signal: AbortSignal): Promise<Comparison> {
     const job = this.job(await this.read(), jobId)
-    if (job.comparison) return
+    if (job.comparison) return job.comparison
     // A run that stopped on a resource ceiling still holds whatever it wrote. It is compared on that
     // deliverable, with the ceiling shown as evidence. Runtime errors, timeouts and cancellations
     // stay out: they say nothing reliable about the harness.
@@ -752,6 +754,7 @@ export class Lifecycle {
       }
       const rounds = Math.max(1, Math.floor(job.budget.selectionRounds ?? 1))
       const votes: (string | null)[] = []
+      let selectionStop: Comparison['selectionStop']
       const roundNotes: string[] = []
       const verified: string[] = []
       const labelsByRound: Record<string, string> = {}
@@ -792,18 +795,30 @@ export class Lifecycle {
         // Keep where the quote came from and a digest of it, never the artifact text itself.
         if (sound) for (const q of quotes.slice(0, 3)) verified.push(`round ${round} ${q.label} ${q.path.slice(0, 200)} quote#${digest(q.quote).slice(0, 12)} (${q.quote.length} chars)`)
         if (round === 1) Object.assign(labelsByRound, labels)
+        // An explicit abstention is a conservative final decision, not a failed
+        // winner response that another round might repair. Do not spend more
+        // model calls trying to overturn it or letting fresh input reverse it.
+        if (result.winner === null) {
+          selectionStop = 'abstained'
+          break
+        }
       }
-      const outcome = tally(votes)
+      const outcome = tally(votes, rounds)
       // The winner may be the baseline: "baseline preferred" is a finding, while null means no majority.
+      const abstentionNote = selectionStop === 'abstained'
+        ? 'Explicit abstention kept the baseline and ended optional evaluation. '
+        : ''
       comparison = {
         winner: outcome.winner,
-        rationale: `${rounds > 1 ? `${rounds} blind rounds, votes ${JSON.stringify(outcome.votes)}, abstained ${outcome.abstentions}. ` : ''}${roundNotes.join(' | ')}`,
+        rationale: `${rounds > 1 ? `${outcome.rounds}/${rounds} blind rounds, votes ${JSON.stringify(outcome.votes)}, abstained ${outcome.abstentions}. ` : ''}${abstentionNote}${roundNotes.join(' | ')}`,
         evidence: verified, labels: labelsByRound, complete: outcome.winner !== null,
+        ...(selectionStop ? { selectionStop } : {}),
       }
     }
     const loaderVersion = job.runnerCapabilities?.loaderVersion
     if (loaderVersion && compared.length && compared.every(candidate => candidate.rollout?.loaderVersion === loaderVersion)) comparison.loaderVersion = loaderVersion
     await this.journal.update(state => { const live = this.job(state, jobId); this.running(state, live); live.comparison = comparison })
+    return comparison
   }
 
   /**

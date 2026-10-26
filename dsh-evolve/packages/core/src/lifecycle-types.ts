@@ -176,6 +176,8 @@ export interface Candidate {
   rollout?: Rollout
 }
 export interface Comparison {
+  /** An explicit selector abstention keeps the baseline and ends optional evaluation. */
+  selectionStop?: 'abstained'
   /** Set when fresh-input verification changed the outcome of the training-input comparison. */
   heldOutEffect?: 'vetoed' | 'favoured'
   /** Set only when all compared executions attest the same advertised loading semantics. */
