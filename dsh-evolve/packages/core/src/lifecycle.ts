@@ -40,6 +40,12 @@ function object(text: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('expected JSON object')
   return value as Record<string, unknown>
 }
+function cachedSelectionAbstention(job: EvolutionEpisode): boolean {
+  return Object.entries(job.responses).some(([stage, raw]) => {
+    if (!/^select(?::\d+)?$/.test(stage)) return false
+    try { return object(raw).winner === null } catch { return false }
+  })
+}
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((x): x is string => typeof x === 'string') : []
 }
@@ -727,7 +733,17 @@ export class Lifecycle {
 
   private async select(jobId: string, task: TaskRun, model: ExperimentModel, signal: AbortSignal): Promise<Comparison> {
     const job = this.job(await this.read(), jobId)
-    if (job.comparison) return job.comparison
+    if (job.comparison) {
+      // Older journals have no marker. A persisted null comparison with an
+      // explicit cached abstention keeps the baseline on resume; a non-null
+      // durable winner is never reinterpreted under the new stopping rule.
+      if (job.comparison.winner === null && job.comparison.selectionStop === undefined && cachedSelectionAbstention(job)) {
+        const stopped: Comparison = { ...job.comparison, selectionStop: 'abstained' }
+        await this.journal.update(state => { this.running(state, this.job(state, jobId)); this.job(state, jobId).comparison = stopped })
+        return stopped
+      }
+      return job.comparison
+    }
     // A run that stopped on a resource ceiling still holds whatever it wrote. It is compared on that
     // deliverable, with the ceiling shown as evidence. Runtime errors, timeouts and cancellations
     // stay out: they say nothing reliable about the harness.
@@ -754,17 +770,28 @@ export class Lifecycle {
       }
       const rounds = Math.max(1, Math.floor(job.budget.selectionRounds ?? 1))
       const votes: (string | null)[] = []
-      let selectionStop: Comparison['selectionStop']
+      let firstAbstainedRound: number | undefined
       const roundNotes: string[] = []
       const verified: string[] = []
       const labelsByRound: Record<string, string> = {}
+      const stageFor = (round: number) => round === 1 ? 'select' : `select:${round}`
+      const hasCachedLaterRound = (round: number) => {
+        for (let later = round + 1; later <= rounds; later += 1) if (job.responses[stageFor(later)] !== undefined) return true
+        return false
+      }
       for (let round = 1; round <= rounds; round += 1) {
-        const stage = round === 1 ? 'select' : `select:${round}`
+        const stage = stageFor(round)
+        // After an abstention, replay only responses already paid for and cached.
+        // Never dispatch a fresh later round, but do not discard a dev.12 majority.
+        if (firstAbstainedRound !== undefined && job.responses[stage] === undefined) break
         let frozen = this.job(await this.read(), jobId).selectionInputs?.[stage]
         if (!frozen) {
           // Old journals cannot reconstruct which candidate a cached anonymous answer meant.
           if (job.responses[stage] !== undefined) {
+            const legacy = object(job.responses[stage])
+            if (legacy.winner === null) firstAbstainedRound ??= round
             votes.push(null); roundNotes.push(`round ${round}: abstained (legacy answer lacks frozen mapping)`)
+            if (firstAbstainedRound !== undefined && !hasCachedLaterRound(round)) break
             continue
           }
           const randomized = compared.map(candidate => ({ candidate, key: randomUUID() })).sort((a, b) => a.key.localeCompare(b.key))
@@ -796,22 +823,27 @@ export class Lifecycle {
         if (sound) for (const q of quotes.slice(0, 3)) verified.push(`round ${round} ${q.label} ${q.path.slice(0, 200)} quote#${digest(q.quote).slice(0, 12)} (${q.quote.length} chars)`)
         if (round === 1) Object.assign(labelsByRound, labels)
         // An explicit abstention is a conservative final decision, not a failed
-        // winner response that another round might repair. Do not spend more
-        // model calls trying to overturn it or letting fresh input reverse it.
+        // winner response that another round might repair. Cached later answers
+        // are still replayed so an upgrade cannot erase an already-paid majority.
         if (result.winner === null) {
-          selectionStop = 'abstained'
-          break
+          firstAbstainedRound ??= round
+          if (!hasCachedLaterRound(round)) break
         }
       }
       const outcome = tally(votes, rounds)
-      // The winner may be the baseline: "baseline preferred" is a finding, while null means no majority.
-      const abstentionNote = selectionStop === 'abstained'
+      // A later cached majority belongs to the pre-upgrade durable computation.
+      // Otherwise an explicit abstention always keeps the baseline, even when
+      // earlier rounds already had enough votes for a winner.
+      const preservedCachedOutcome = firstAbstainedRound !== undefined && votes.length > firstAbstainedRound && outcome.winner !== null
+      const selectionStop: Comparison['selectionStop'] = firstAbstainedRound !== undefined && !preservedCachedOutcome ? 'abstained' : undefined
+      const winner = selectionStop === undefined ? outcome.winner : null
+      const selectionNote = selectionStop === 'abstained'
         ? 'Explicit abstention kept the baseline and ended optional evaluation. '
-        : ''
+        : preservedCachedOutcome ? 'Cached rounds after an abstention were replayed; their majority was retained. ' : ''
       comparison = {
-        winner: outcome.winner,
-        rationale: `${rounds > 1 ? `${outcome.rounds}/${rounds} blind rounds, votes ${JSON.stringify(outcome.votes)}, abstained ${outcome.abstentions}. ` : ''}${abstentionNote}${roundNotes.join(' | ')}`,
-        evidence: verified, labels: labelsByRound, complete: outcome.winner !== null,
+        winner,
+        rationale: `${rounds > 1 ? `${outcome.rounds}/${rounds} blind rounds, votes ${JSON.stringify(outcome.votes)}, abstained ${outcome.abstentions}. ` : ''}${selectionNote}${roundNotes.join(' | ')}`,
+        evidence: verified, labels: labelsByRound, complete: winner !== null,
         ...(selectionStop ? { selectionStop } : {}),
       }
     }
