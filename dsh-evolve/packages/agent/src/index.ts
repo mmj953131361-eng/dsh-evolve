@@ -1,7 +1,7 @@
 /** DSH integration for the persistent task/experiment lifecycle. */
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 import z from '@deepseek-ai/schemastery'
 import type { Evolve } from '@dsh-evolve/core/plugin'
@@ -105,6 +105,7 @@ interface State {
   task: string; taskType: string; taskId?: string; step: number; shaped: boolean; edits: number; tokens: number;
   lastCheckpoint: number; lastProposalStep: number; signal?: AbortSignal; preparing?: Promise<TaskRun>; pending: string | undefined; rulesRevision?: string; rules: readonly LoopRule[]; fired: Set<string>; notifiedAdoptions: Set<string>; finalFinish?: string; lastUserText?: string; awaitingUser?: boolean;
   pendingCancellation?: Promise<void>;
+  coalesced?: { turn: number; messages: readonly UserMessage[]; admitted: Set<UserMessage['id']> };
 }
 function classify(task: string): string {
   if (/csv|tsv|表格|分隔符/i.test(task)) return 'csv-cleanup'
@@ -116,6 +117,37 @@ function classify(task: string): string {
 }
 function textOf(messages: readonly UserMessage[]): string {
   return messages.filter(m => m.source.kind === 'user').flatMap(m => m.content).map(b => b.type === 'text' ? b.text : '').join('\n').trim()
+}
+
+/** Treat a batch of independent continuation commands as the latest single continuation. */
+function continuationBatch(messages: readonly UserMessage[]): string | undefined {
+  const texts = messages.filter(m => m.source.kind === 'user')
+    .map(m => m.content.map(b => b.type === 'text' ? b.text : '').join('\n').trim()).filter(Boolean)
+  return texts.length > 0 && texts.every(isContinuationText) ? texts.at(-1) : undefined
+}
+
+/** Durable messages may be cloned on append; semantic equality still rejects edited copies. */
+function sameMessage(left: UserMessage, right: UserMessage): boolean {
+  return left === right || JSON.stringify(left) === JSON.stringify(right)
+}
+
+/**
+ * Consume unchanged pending messages only after their copies were admitted to
+ * the current turn. Until then the host inbox remains authoritative for both
+ * keepInbox and destructive cancellation, and for pre-step/request failures.
+ */
+function claimAdmittedTurns(agent: Agent, turn: number, messages: readonly UserMessage[]): void {
+  if (messages.length === 0) return
+  const dispatch = agentEvents(agent.ctx, agent)
+  for (const message of messages) {
+    // Replacement or reordering since pre-step must not consume new, unseen work.
+    const index = agent.inbox.nextTurn.findIndex(pending => pending === message)
+    if (index < 0) continue
+    agent.session.append('agent/inbox/spliced', {
+      target: 'next-turn', start: index, removedCount: 1, inserted: [],
+    })
+    dispatch.emit('agent/inbox/claimed', { message, turn })
+  }
 }
 
 export function apply(ctx: Context, config: Partial<Config> = {}): void {
@@ -287,18 +319,41 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
     automatic.scheduleCheckpoint(agent)
   })
   ctx.on('agent/disposed', ({ agent }) => automatic.cancel(agent, 'Agent disposed.', undefined, false))
+  ctx.on('session/event', (session, event) => {
+    if (event.type !== 'user/message') return
+    const agent = ctx.agents.get(session.id)
+    const batch = agent && states.get(agent)?.coalesced
+    if (batch?.messages.some(message => message.id === event.data.id && sameMessage(message, event.data))) batch.admitted.add(event.data.id)
+  })
 
   ctx.on('agent/pre-step', async (payload, next) => {
     const decision = await next()
-    if (!allowed(payload.agent) || decision.kind !== 'enter') return decision
+    if (decision.kind === 'reject' || payload.signal.aborted || !allowed(payload.agent) || decision.kind !== 'enter') return decision
     const agent = payload.agent; const local = stateOf(agent); local.step = payload.step
     try {
       await local.pendingCancellation
       payload.signal.throwIfAborted()
       if (!(await life(agent).read()).enabled) { await ctx.evolve.setEnabled(agent, false); return decision }
+      if (payload.step === 1) {
+        // Stock DSH claimed only the first next-turn message. Offer the remaining
+        // messages with it, but leave their inbox entries untouched until admission.
+        const admittedIds = new Set([...payload.messages, ...decision.messages].map(message => message.id))
+        const queued = agent.inbox.nextTurn.filter(message => !admittedIds.has(message.id))
+        if (queued.length > 0) {
+          local.coalesced = { turn: payload.turn, messages: queued, admitted: new Set() }
+          const offeredCount = payload.messages.length
+          for (const message of queued) payload.messages.push(message)
+          if (decision.messages !== payload.messages) {
+            const insertAt = payload.messages.slice(0, offeredCount).every((message, index) => decision.messages[index] === message)
+              ? offeredCount : decision.messages.length
+            decision.messages = [...decision.messages.slice(0, insertAt), ...queued, ...decision.messages.slice(insertAt)]
+          }
+        } else delete local.coalesced
+      }
       const incoming = textOf(payload.messages)
+      const continuation = continuationBatch(payload.messages)
       let previous = local.taskId ? (await life(agent).read()).tasks[local.taskId] : undefined
-      if (incoming && previous && ['active', 'awaiting-input'].includes(previous.status) && isContinuationText(incoming)) {
+      if (incoming && previous && ['active', 'awaiting-input'].includes(previous.status) && continuation !== undefined) {
         await automatic.checkpoint(agent, 'user-continue').catch(error => ctx.logger.warn('evolve continuation checkpoint: %o', error))
         previous = (await life(agent).read()).tasks[previous.id] ?? previous
       }
@@ -306,13 +361,13 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
         // Inbox insertion precedes consuming the message. An observer may have
         // started between those events; invalidate again at the actual version change.
         automatic.changed(agent)
-        const updated = await life(agent).updateTaskPrompt(previous.id, incoming)
+        const updated = await life(agent).updateTaskPrompt(previous.id, continuation ?? incoming)
         local.task = updated.prompt
         automatic.changed(agent)
       }
       if (incoming) local.lastUserText = incoming
       if (local.preparing || !local.taskId || incoming && previous && !['active', 'awaiting-input'].includes(previous.status)) {
-        const prompt = incoming || local.task
+        const prompt = continuation ?? (incoming || local.task)
         if (prompt || local.preparing) {
           local.preparing ??= ensureTask(agent, prompt)
           let timer: ReturnType<typeof setTimeout> | undefined
@@ -389,7 +444,14 @@ export function apply(ctx: Context, config: Partial<Config> = {}): void {
     if (frame.type === 'chunk' && frame.chunk.type === 'usage' && allowed(agent)) stateOf(agent).tokens += processingTokens(frame.chunk.usage)
     if (frame.type === 'chunk' && frame.chunk.type === 'finish' && allowed(agent)) stateOf(agent).finalFinish = frame.chunk.reason.kind
   })
-  ctx.on('agent/turn-stopping', async ({ agent }) => {
+  ctx.on('agent/turn-stopping', async ({ agent, turn, signal }) => {
+    const local = states.get(agent); const batch = local?.coalesced
+    if (local && batch?.turn === turn) {
+      // Only copies actually logged by this turn are consumed. New, replaced or
+      // unadmitted messages stay pending, including when cancellation raced us.
+      if (!signal.aborted) claimAdmittedTurns(agent, turn, batch.messages.filter(message => batch.admitted.has(message.id)))
+      delete local.coalesced
+    }
     if (allowed(agent)) await checkpoint(agent).catch(error => ctx.logger.warn('evolve checkpoint: %o', error))
   })
 

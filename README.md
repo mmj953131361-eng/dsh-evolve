@@ -12,12 +12,12 @@ DSH Harness Evolve（面板简称 **Evo**）是 **DeepSeek Harness 的自进化�
 
 普通用户下载预构建 `.tgz` 即可，**无需克隆仓库或构建源码**。
 
-1. 准备 DSH 和可用模型。dev.12 已验证 DSH `0.2.1-rc.2` / `0.2.1-rc.3` 的安装与启动；其他版本按宿主 API 检查，详见[兼容性](dsh-evolve/docs/compat.md)。
-2. 从 [Releases](https://github.com/mmj953131361-eng/dsh-harness-evolve/releases) 下载 `dsh-evolve-bundle-0.2.2-dev.12.tgz`。
+1. 准备 DSH 和可用模型。dev.13 已验证 DSH `0.2.1-rc.2` / `0.2.1-rc.3` 的安装与启动；其他版本按宿主 API 检查，详见[兼容性](dsh-evolve/docs/compat.md)。
+2. 从 [Releases](https://github.com/mmj953131361-eng/dsh-harness-evolve/releases) 下载 `dsh-evolve-bundle-0.2.2-dev.13.tgz`。
 3. 退出对应 DSH 实例，安装到实际使用的 Profile，例如桌面端 `desktop`：
 
    ```sh
-   dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.12.tgz
+   dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.13.tgz
    ```
 
 4. 重启对应 Profile，打开本地项目和新会话，正常完成任务。在 **Evo** 入口查看状态、策略变化和撤销。

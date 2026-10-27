@@ -1,14 +1,14 @@
-# 安装与运行（0.2.2-dev.12）
+# 安装与运行（0.2.2-dev.13）
 
 普通用户优先按[Quickstart](../../docs/quickstart.md)下载预构建包安装；以下是源码构建及进阶配置。
 
-需要 DSH 原生 Agent、工具、技能与 LLM 服务，Node `^22.19.0 || >=24`、可写工作区及可用模型路由。dev.12 已验证 rc.2 / rc.3 安装与启动；不按版本号固定宿主，详见[兼容性](compat.md)。npm 尚未发布，使用 Release 或本地构建：
+需要 DSH 原生 Agent、工具、技能与 LLM 服务，Node `^22.19.0 || >=24`、可写工作区及可用模型路由。dev.13 已验证 rc.2 / rc.3 安装与启动；不按版本号固定宿主，详见[兼容性](compat.md)。npm 尚未发布，使用 Release 或本地构建：
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
 pnpm --filter @dsh-evolve/bundle pack --pack-destination "$PWD/dist"
-dsh plugin --profile <name> add ./dist/dsh-evolve-bundle-0.2.2-dev.12.tgz
+dsh plugin --profile <name> add ./dist/dsh-evolve-bundle-0.2.2-dev.13.tgz
 dsh --profile <name> --dump-config
 ```
 
@@ -23,6 +23,8 @@ bundle 的 DSH/Cordis/Schemastery 由宿主提供，不另装一套核心。模�
 观察默认输出上限为 `65536`（受模型路由和上下文余量约束），累计处理预算为 `2000000` token，每次调用尝试时限为 `600000` 毫秒。`automaticMaxCalls: 6` 按输入版本、阶段与证据单元计数；重试保留累计费用与未知用量预留。已有 Profile 的显式设置不会被升级覆盖。升级后重启 DSH；超时、输出超限或格式失败可从面板重试，已取消的任务请发新消息开始。恢复或入队不代表完成策略比较，也不证明候选更好。
 
 dev.11 修正新输入验证中同等合格候选的成本排序：只有所有候选的 token 用量完整时才按 token 比较，否则统一按步数比较并说明原因。缺失用量不当作零成本，平均 token 仅统计已报告用量的运行；未知用量仍保留预算预留。失败运行保留简短原因，诊断记录区分用量完全缺失与部分缺失。本次更新不改变选择后反思阶段的网络失败恢复。
+
+dev.13 在 Evo 启用时把剩余 next-turn 消息按原顺序并入当前 pre-step，Stop 保留的旧纠正会与新的继续指令一起进入同一次请求。消息只有实际写入当前 turn 且内容未被替换后，才在 turn-stopping 消费对应队列项；stock 与可选 evolve-loop 共用这条 Evo 路径，pre-step/request 失败及 cancel/keepInbox 仍遵循宿主语义。连续多条 continuation 按最新一条继承原任务要求。选择器明确返回 `winner:null` 时保留基线并结束可选评估，不再调用剩余比较、新输入验证或反思；非空但证据无效的选择不触发这一早退。早退决定保存在 lifecycle 中，显式恢复不会重跑这些阶段。升级前已缓存的后续轮次会只读重放，已形成的多数票不会因崩溃恢复而丢失；末尾弃权也不会误用此前票数选出候选。
 
 ## 前台与 worker
 

@@ -6,7 +6,7 @@
 
 ## 1. 准备 DSH 和模型
 
-dev.12 已验证 **DSH `0.2.1-rc.2` / `0.2.1-rc.3`** 的安装与启动。安装不再固定宿主版本号；入口检查需要的 API，不兼容时停用 Evo 并说明原因。其他版本与完整行为仍需分别确认，详见[兼容性说明](../dsh-evolve/docs/compat.md)。
+dev.13 已验证 **DSH `0.2.1-rc.2` / `0.2.1-rc.3`** 的安装与启动。安装不再固定宿主版本号；入口检查需要的 API，不兼容时停用 Evo 并说明原因。其他版本与完整行为仍需分别确认，详见[兼容性说明](../dsh-evolve/docs/compat.md)。
 
 - 已安装 DSH 桌面版：在已有应用中使用；其默认 Profile 通常是 `desktop`。如果使用了自定义 Profile，后续命令必须填写它的名字。
 - 希望使用独立 Web Profile：准备 Node `^22.19.0 || >=24`，并按 [DSH 官方安装说明](https://github.com/deepseek-ai/deepseek-harness)准备 CLI。可固定版本使用 `npx --yes @deepseek-ai/dsh@0.2.1-rc.3`，替代下文每一处 `dsh`。
@@ -29,9 +29,9 @@ macOS 桌面版如果提示找不到 `dsh`，把命令中的 `dsh` 替换为：
 
 ## 2. 下载插件包
 
-打开 [Releases](https://github.com/mmj953131361-eng/dsh-harness-evolve/releases)，选择 `v0.2.2-dev.12` 预发布，下载 Assets 中的：
+打开 [Releases](https://github.com/mmj953131361-eng/dsh-harness-evolve/releases)，选择 `v0.2.2-dev.13` 预发布，下载 Assets 中的：
 
-- `dsh-evolve-bundle-0.2.2-dev.12.tgz`：可安装插件，不是页面自动生成的 Source code 压缩包。
+- `dsh-evolve-bundle-0.2.2-dev.13.tgz`：可安装插件，不是页面自动生成的 Source code 压缩包。
 - `evo-first-run.patch.yml`：首次仅验证加载，关闭 Evo 模型调用。
 - `evo-learning.patch.yml`：显式开启有界学习的示例配置。
 - `SHA256SUMS`：可选的文件校验清单。
@@ -45,7 +45,7 @@ macOS 桌面版如果提示找不到 `dsh`，把命令中的 `dsh` 替换为：
 退出对应 DSH 实例后安装（将路径替换为真实下载位置）：
 
 ```sh
-dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.12.tgz
+dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.13.tgz
 ```
 
 安装到 `web` 不会自动影响 `desktop`，反之亦然。重启对应 Profile 后，**新建会话**再验证。
@@ -58,7 +58,7 @@ dsh plugin --profile desktop add /完整下载路径/dsh-evolve-bundle-0.2.2-dev
 
 ```sh
 dsh --profile evo-demo --from-default-profile web --dump-config
-dsh plugin --profile evo-demo add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.12.tgz
+dsh plugin --profile evo-demo add /完整下载路径/dsh-evolve-bundle-0.2.2-dev.13.tgz
 dsh --profile evo-demo --patch /完整下载路径/evo-first-run.patch.yml --port 3081
 ```
 
@@ -100,6 +100,8 @@ dsh --profile evo-demo --patch /完整下载路径/evo-learning.patch.yml --port
 
 后台实验不会直接替换前台已经交给你的文件。学习结果也不保证能迁移到所有后续任务。
 
+生成中连续补充的要求会按原顺序一起进入下一轮；Stop 保留的排队消息也会与新的继续指令一起处理，避免先单独执行已被后续消息纠正的旧要求。选择器明确弃权时会直接保留原策略，不再运行剩余比较或可选的新输入验证、反思调用。
+
 ## 6. 暂停、撤销和卸载
 
 - **暂停学习**：面板高级菜单选择暂停，或在支持 slash 命令的会话中执行 `/evolve off`。`/evolve on` 恢复开启，但不会自动重启已取消的实验。首次配置文件中禁用的组件要先修改配置并重启。
@@ -124,7 +126,7 @@ dsh --profile evo-demo --patch /完整下载路径/evo-learning.patch.yml --port
 | 输出上限或预算失败 | 核对模型真实能力，减少任务规模或显式调整预算；提高上限不保证质量 |
 | 触发不了学习 | 检查是否仍在等待用户输入、是否有 grounded requirements 和交付证据；暂停配置是否仍在启用 |
 | Evo 显示宿主不兼容 | 查看面板或 `/evolve/compatibility` 原因；更新兼容版本后重新加载 Evo 或重启 Profile，不要向 Desktop Profile 补装一套 DSH SDK |
-| 旧版升级出现 SDK 残留或构建脚本提示 | dev.12 使用宿主依赖；保留现有 Profile，按[兼容性说明](../dsh-evolve/docs/compat.md)排查，不要全局放行所有脚本 |
+| 旧版升级出现 SDK 残留或构建脚本提示 | dev.13 使用宿主依赖；保留现有 Profile，按[兼容性说明](../dsh-evolve/docs/compat.md)排查，不要全局放行所有脚本 |
 | 变更已写入但行为没变 | 检查生效时机；技能需再次调用，项目用新会话，Profile 可能需重启 |
 
 仍有问题请提交 [Issue](https://github.com/mmj953131361-eng/dsh-harness-evolve/issues)，提供 DSH/Evo/操作系统版本、Profile 类型、复现步骤和脱敏错误。不要附密钥、整个任务快照或私人项目资料。更完整的开发/配置细节见[安装说明](../dsh-evolve/docs/install.md)；安全问题按 [SECURITY.md](../SECURITY.md)私密报告。
